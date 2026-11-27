@@ -39,7 +39,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final chatOption = find.byTooltip('Opsi jadwal').last;
-    await tester.ensureVisible(chatOption);
+    await tester.scrollUntilVisible(chatOption.hitTestable(), 150);
     await tester.tap(chatOption);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit jadwal'));
@@ -127,6 +127,7 @@ void main() {
                     displayName: 'Pro',
                     accessToken: 'token')))));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Maks. 2 pasien aktif'), 180);
     expect(find.text('Maks. 2 pasien aktif'), findsOneWidget);
     expect(find.text('Tanpa batas'), findsNothing);
     expect(find.text('Simpan kapasitas'), findsNothing);

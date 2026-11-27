@@ -1487,6 +1487,8 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 # Session and clinical chat contracts — 2026-11-06
 
 - PATCH /v1/care-sessions/{id}: status attended/absent marks the caller's own attendance; professional completed is allowed only after scheduled end. Responses add patient_attendance/professional_attendance (empty, attended, absent) and nullable *_attendance_marked_at. Legacy attended_marked_at remains available. Patient responses omit private_note. Omitted detail fields in PATCH are preserved.
+- A newly saved text, voice, or file message records attendance for its authenticated sender during the scheduled interval, including its start and excluding its end. Message retries and structured record shares do not record attendance.
+- A scheduled session can be cancelled before its start. A professional cancellation or patient cancellation at least one hour before the start restores one package credit or queues the full original standalone payment for refund. A later patient cancellation consumes the package credit or standalone fee. Standalone refunds use original Midtrans payment details when supported. Manual cases are logged in the admin refund ledger.
 - GET /v1/care-sessions: mobile feeds retain every scheduled session. Upcoming/today/ongoing are ordered nearest first; past/all include every scheduled row plus at most 100 other history rows. The response fields, scope values and ownership checks are unchanged. Internal bounded ListCareSessions callers retain their existing limit semantics.
 - GET /v1/crisis-incident-log: counts.total covers SOS and screening records; counts.unresolved counts only SOS without resolved_at, independently of the item limit. Screening flags are historical records and do not support SOS resolution. POST /v1/crisis-incidents/{id}/resolve accepts empty resolution_notes after explicit confirmation.
 - GET /v1/chat-permission: access adds session_id and nullable session_ends_at with WIB offset. Scheduled end is exclusive; terminal sessions never grant live access.
@@ -1642,7 +1644,7 @@ mandatory. Additive migration 041 must run before the new API binary.
 
 Refinement 2026-11-13 adds `recurrence: monthly` (interval1–12), anchored to
 the original start day with short-month clamp and anchor restoration. Optional
-`details.weekly_target`0–7 selects flexible weekly frequency; omission retains
+`details.weekly_target`0–1000 selects flexible weekly frequency; omission retains
 selected weekdays, 0 has no quota. Empty rest days do not fail a flexible quota;
 only fully elapsed active weeks below quota break auto-fail streaks. Explicit
 failed logs still break streaks. `completed_weekdays` is the sorted ISO weekday
@@ -1673,3 +1675,21 @@ POST booking paket menerima `additional_sessions`, paling banyak tiga waktu
 `YYYY-MM-DDTHH:mm` WIB sesudah sesi pertama. Pilihan diproses setelah pembayaran.
 Perubahan status jadwal atau bentrok yang muncul setelah checkout meninggalkan
 kredit pasien untuk dijadwalkan kembali.
+
+
+### Flexible weekly session counts (2026-11-27)
+
+For `yes_no` goals with weekly recurrence and a non-null `weekly_target`, `value`
+is the selected day's session count (0–1,000,000). Repeated Ya increments it and
+Undo removes one session on the selected date. `done_this_week` sums actual
+sessions through the selected WIB date, rather than unique completion dates.
+Requests omitting `value` retain idempotent legacy yes/no behavior. Numeric and
+checklist goals retain one completion per date. Flexible weekly goals contribute
+to the separate weekly summary, never the daily completion numerator/denominator;
+only due non-flexible goals contribute to the daily percentage.
+
+Storage marks counted sessions within the existing `habit_logs.value` integer as
+`-(count+1)`; all API reads/writes expose nonnegative counts. Unmarked legacy done
+rows contribute one session regardless of a retained numeric amount, preventing
+method changes from inflating counts. Marked session values contribute zero
+numeric amount if the method changes to numeric. No schema or wire fields change.

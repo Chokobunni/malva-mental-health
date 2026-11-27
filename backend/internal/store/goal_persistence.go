@@ -83,7 +83,7 @@ func summarizeGoal(g *Goal, logs []HabitLog, on, today time.Time) {
 		date, err := goalDate(l.LoggedOn)
 		if done && err == nil && goalDue(g.Details, date) && l.LoggedOn >= monday && l.LoggedOn <= selected {
 			g.CompletedWeekdays = append(g.CompletedWeekdays, goalISOWeekday(date))
-			g.DoneThisWeek++
+			g.DoneThisWeek += goalLogSessions(g.Details, l)
 			date := l.LoggedOn
 			if g.LastLoggedOn == nil || date > *g.LastLoggedOn {
 				g.LastLoggedOn = &date
@@ -92,7 +92,7 @@ func summarizeGoal(g *Goal, logs []HabitLog, on, today time.Time) {
 		if l.LoggedOn == selected {
 			found = true
 			g.DoneToday = done
-			g.TodayValue = l.Value
+			g.TodayValue = goalPublicValue(g.Details, l)
 			g.TodayCompletedStepIDs = append([]string{}, l.CompletedStepIDs...)
 		}
 	}
@@ -391,6 +391,7 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if err := tx.Commit(); err != nil {
 		return HabitLog{}, err
 	}
+	l.Value = goalPublicValue(g.Details, l)
 	return l, nil
 }
 
@@ -410,7 +411,11 @@ func (s *Store) ListHabitLogs(ctx context.Context, patientID, from, to string) (
 	}
 	// NULLIF avoids trying to cast an empty bound before PostgreSQL evaluates OR.
 	rows, err := s.db.QueryContext(ctx, `
- SELECT l.id,l.goal_id,l.patient_id,l.logged_date::text,l.done,l.created_at,l.value,l.completed_step_ids
+ SELECT l.id,l.goal_id,l.patient_id,l.logged_date::text,l.done,l.created_at,
+ CASE WHEN g.details->>'method'='yes_no' AND g.details->>'recurrence'='weekly'
+       AND g.details->>'weekly_target' IS NOT NULL
+      THEN CASE WHEN l.value<0 THEN -l.value-1 WHEN l.done THEN 1 ELSE 0 END
+      ELSE GREATEST(l.value,0) END,l.completed_step_ids
  FROM habit_logs l JOIN goals g ON g.id=l.goal_id AND g.patient_id=l.patient_id
  WHERE l.patient_id=$1 AND (NULLIF($2,'')::date IS NULL OR l.logged_date>=NULLIF($2,'')::date)
  AND (NULLIF($3,'')::date IS NULL OR l.logged_date<=NULLIF($3,'')::date)

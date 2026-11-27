@@ -70,6 +70,24 @@ func run() error {
 
 	app := server.New(cfg, authManager, st, hub, logger)
 
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			refundCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+			err := app.RunCareCancellationRefunds(refundCtx)
+			cancel()
+			if err != nil && ctx.Err() == nil {
+				logger.Warn("gagal membaca antrean refund sesi", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
 	// Sweeper paket/sesi: kedaluwarsakan paket 6 minggu, hanguskan
 	// pending_payment, auto-complete sesi lama, kirim pengingat sesi video
 	// yang akan dimulai, dan ISI LINK Google Meet yang belum ada.

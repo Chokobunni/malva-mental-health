@@ -81,10 +81,10 @@ void main() {
                         onChanged: () async {},
                         onCancel: () {},
                         onReschedule: () {}))))));
-    expect(find.text('AKSI LAIN'), findsOneWidget);
+    expect(find.text('Aksi lain'), findsOneWidget);
     expect(find.textContaining('Mulai dalam'), findsOneWidget);
     expect(find.text('Reschedule'), findsNothing);
-    await tester.tap(find.text('AKSI LAIN'));
+    await tester.tap(find.text('Aksi lain'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Reschedule'), findsOneWidget);

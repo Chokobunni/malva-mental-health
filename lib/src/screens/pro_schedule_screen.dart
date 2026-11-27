@@ -13,6 +13,7 @@ import '../services/server_clock.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
+import '../widgets/session_cancellation_sheet.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_schedule_calendar.dart';
@@ -572,40 +573,9 @@ class ProfessionalSessionActions extends ConsumerWidget {
             })
           ]));
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
-    var reason = '';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Batalkan sesi?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-                'Kredit sesi pasien otomatis kembali dan bisa dijadwalkan ulang.'),
-            const SizedBox(height: 10),
-            TextField(
-              onChanged: (value) => reason = value,
-              maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Alasan (opsional)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Kembali'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: compactFilledButtonStyle.copyWith(
-              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
-            ),
-            child: const Text('Batalkan'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted || !_canCancel) return;
+    final reason = await showSessionCancellationSheet(context,
+        session: session, professional: true);
+    if (reason == null || !context.mounted || !_canCancel) return;
     final MalvaApiClient api = apiClient ?? ref.read(apiClientProvider);
     final token = accessToken ?? ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
@@ -614,12 +584,14 @@ class ProfessionalSessionActions extends ConsumerWidget {
         accessToken: token,
         sessionId: session.id,
         status: 'cancelled_by_professional',
-        cancelReason: reason.trim(),
+        cancelReason: reason,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Sesi dibatalkan. Kredit pasien dikembalikan.')),
+        SnackBar(
+            content: Text(session.packageId?.trim().isNotEmpty == true
+                ? 'Sesi dibatalkan. Kredit pasien dikembalikan.'
+                : 'Sesi dibatalkan. Pengembalian dana pasien diproses.')),
       );
       await onChanged();
     } on Object catch (e) {
@@ -887,6 +859,28 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
+      bottomNavigationBar: _isLoading || _error != null
+          ? null
+          : SafeArea(
+              child: Container(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+                  decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border:
+                          Border(top: BorderSide(color: Color(0xFFEDE7F1)))),
+                  child: FilledButton.icon(
+                      onPressed:
+                          _savingPricing || _savingCapacity || _savingSchedules
+                              ? null
+                              : _savePricing,
+                      style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(22))),
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(_savingPricing
+                          ? 'Menyimpan...'
+                          : 'Simpan harga & jadwal')))),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -935,14 +929,26 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         'quick_video',
                         'package'
                       ]) ...[
+                        if (category == 'quick_chat') ...[
+                          const SizedBox(height: 10),
+                          const Text('JADWAL PER LAYANAN',
+                              style: TextStyle(
+                                  color: Color(0xFFAA88B3),
+                                  fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 18)
+                        ],
                         _categoryCard(category),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
                       ],
                       const Text('Harga layanan',
                           style: TextStyle(
                               fontSize: 22, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 10),
+                      const Text(
+                          'Tarif bersih yang akan ditampilkan kepada pasien.',
+                          style: TextStyle(color: Color(0xFF7B8791))),
+                      const SizedBox(height: 16),
                       ProfessionalPriceCard(
+                        showSaveButton: false,
                         chat: _chatPrice,
                         video: _videoPrice,
                         package: _packagePrice,
@@ -1012,8 +1018,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         final day = ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
         return day == 0 ? a.startTime.compareTo(b.startTime) : day;
       });
-    final color =
-        category == 'package' ? const Color(0xFF168369) : MalvaColors.seed;
+    final color = switch (category) {
+      'package' => const Color(0xFF168369),
+      'shared' => const Color(0xFFCC911F),
+      'quick_chat' => const Color(0xFF1484AF),
+      _ => const Color(0xFF5E4AD2)
+    };
     return SoftCard(
       radius: 24,
       padding: const EdgeInsets.all(16),
@@ -1022,17 +1032,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         children: [
           Row(
             children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(professionalServiceIcons[category],
-                      color: color, size: 23),
-                ),
-              ),
+              professionalServiceArtwork(category),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
@@ -1043,7 +1043,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             fontSize: 16, fontWeight: FontWeight.w800)),
                     Text(
                         switch (category) {
-                          'quick_chat' => 'Konsultasi teks terjadwal',
+                          'quick_chat' => 'Konsultasi via pesan singkat',
                           'quick_video' => 'Konsultasi tatap muka daring',
                           'package' => 'Paket pendampingan 4 sesi',
                           _ =>
@@ -1058,6 +1058,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   color: color),
             ],
           ),
+          const Divider(height: 28, color: Color(0xFFF1EEF4)),
           if (!primary)
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -1085,12 +1086,19 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
               ],
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed:
-                    _savingSchedules ? null : () => _editSchedule(category),
-                icon: const Icon(Icons.add_rounded),
-                label: Text(primary ? 'Tambah jadwal' : 'Tambah jadwal khusus'),
-              ),
+              child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFE5DAEA)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16))),
+                    onPressed:
+                        _savingSchedules ? null : () => _editSchedule(category),
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text(
+                        primary ? 'Tambah jadwal' : 'Tambah jadwal khusus'),
+                  )),
             ),
           ],
           if (category == 'package' &&
@@ -1124,9 +1132,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    const Text('Slot pasien',
+                    const Text('Slot pasien aktif',
                         style: TextStyle(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 3),
+                    const Text('Khusus Paket',
+                        style:
+                            TextStyle(color: Color(0xFF23826D), fontSize: 11)),
                     Text(
                         capacity == 0
                             ? 'Ditutup untuk pasien baru'
@@ -1600,10 +1611,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         quickChatPrice: parseProfessionalPrice(_chatPrice.text),
         quickVideoPrice: parseProfessionalPrice(_videoPrice.text),
         packagePrice: parseProfessionalPrice(_packagePrice.text),
+        patientCapacity: _patientCapacity,
       );
       if (!mounted) return;
+      setState(() => _savedPatientCapacity = _patientCapacity);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Harga tersimpan.')),
+        const SnackBar(content: Text('Harga & jadwal tersimpan.')),
       );
     } on Object catch (e) {
       if (!mounted) return;

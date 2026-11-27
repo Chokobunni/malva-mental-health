@@ -73,8 +73,8 @@ func ValidateGoalDetails(d *GoalDetails) error {
 	if d.Interval < 1 || d.Interval > maxInterval {
 		return errors.New("interval di luar batas recurrence")
 	}
-	if d.WeeklyTarget != nil && (d.Recurrence != "weekly" || *d.WeeklyTarget < 0 || *d.WeeklyTarget > 7) {
-		return errors.New("weekly_target hanya untuk weekly dalam 0–7")
+	if d.WeeklyTarget != nil && (d.Recurrence != "weekly" || *d.WeeklyTarget < 0 || *d.WeeklyTarget > 1000) {
+		return errors.New("weekly_target hanya untuk weekly dalam 0–1000")
 	}
 	if d.Recurrence == "weekly" && d.WeeklyTarget == nil && len(d.Weekdays) == 0 {
 		return errors.New("weekdays wajib untuk recurrence weekly")
@@ -248,6 +248,10 @@ func validateHabitDate(d *GoalDetails, on, now time.Time) error {
 }
 
 func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProgressPatch) (HabitLog, error) {
+	priorValue := current.Value
+	if current.Value < 0 {
+		current.Value = 0
+	}
 	if p.Value != nil {
 		if *p.Value < 0 || *p.Value > 1000000 {
 			return HabitLog{}, errors.New("value harus 0–1000000")
@@ -276,6 +280,22 @@ func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProg
 	current.Done = done
 	if d != nil {
 		switch d.Method {
+		case "yes_no":
+			if countedWeeklyGoal(d) {
+				// Negative storage marks session provenance; old numeric amounts
+				// remain unmarked and can contribute only one legacy done session.
+				if p.Value == nil {
+					current.Value = 0
+					if done {
+						current.Value = 1
+						if priorValue < 0 {
+							current.Value = -priorValue - 1
+						}
+					}
+				}
+				current.Done = current.Value > 0
+				current.Value = -current.Value - 1
+			}
 		case "numeric":
 			current.Done = current.Value >= d.Target
 		case "checklist":
@@ -347,7 +367,7 @@ func flexibleGoalStreak(d *GoalDetails, logs []HabitLog, on, today time.Time) in
 			if goalLogDone(d, l) {
 				date, _ := goalDate(l.LoggedOn)
 				monday := date.AddDate(0, 0, 1-goalISOWeekday(date))
-				counts[monday.Format("2006-01-02")]++
+				counts[monday.Format("2006-01-02")] += goalLogSessions(d, l)
 			}
 		}
 		start, _ := goalDate(d.StartDate)
@@ -383,4 +403,33 @@ func flexibleGoalStreak(d *GoalDetails, logs []HabitLog, on, today time.Time) in
 		count++
 	}
 	return count
+}
+
+// Counted weekly yes/no uses the existing daily value, retaining legacy done logs.
+func countedWeeklyGoal(d *GoalDetails) bool {
+	return d != nil && d.Method == "yes_no" && d.Recurrence == "weekly" && d.WeeklyTarget != nil
+}
+
+func goalLogSessions(d *GoalDetails, l HabitLog) int {
+	if !goalLogDone(d, l) {
+		return 0
+	}
+	if countedWeeklyGoal(d) && l.Value < 0 {
+		return -l.Value - 1
+	}
+	return 1
+}
+
+// Values crossing the API boundary remain nonnegative and method appropriate.
+func goalPublicValue(d *GoalDetails, l HabitLog) int {
+	if countedWeeklyGoal(d) {
+		if l.Value < 0 {
+			return -l.Value - 1
+		}
+		if l.Done {
+			return 1
+		}
+		return 0
+	}
+	return max(l.Value, 0)
 }

@@ -1,3 +1,5 @@
+import 'package:malva_mental_health/src/services/server_clock.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -152,6 +154,8 @@ void main() {
       'future session card explains check-in and offers consultation actions',
       (tester) async {
     final upcoming = _aktif()
+      ..['scheduled_at'] =
+          wibIso(ServerClock.now().add(const Duration(hours: 22)))
       ..['session_type'] = 'video'
       ..['package_id'] = 'package-synthetic';
     final api = MalvaApiClient(
@@ -163,8 +167,8 @@ void main() {
     expect(find.text('Video call mendatang'), findsOneWidget);
     expect(find.textContaining('Paket'), findsWidgets);
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
-    await tester.ensureVisible(find.text('AKSI LAIN'));
-    await tester.tap(find.text('AKSI LAIN'));
+    await tester.ensureVisible(find.text('Aksi lain'));
+    await tester.tap(find.text('Aksi lain'));
     await tester.pumpAndSettle();
     expect(find.text('Reschedule'), findsOneWidget);
     expect(find.text('Batal'), findsOneWidget);

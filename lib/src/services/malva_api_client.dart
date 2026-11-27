@@ -5873,8 +5873,19 @@ class BackendGoal {
   BackendGoal withDefinition(BackendGoal saved, {required DateTime on}) {
     if (wibDateKey(on) == wibDateKey(wibNow())) return saved;
     final d = saved.details;
+    bool counted(GoalDetails? value) =>
+        value?.method == 'yes_no' &&
+        value?.recurrence == 'weekly' &&
+        value?.weeklyTarget != null;
+    // Historical edits keep the selected log; never reinterpret its old numeric
+    // amount as sessions (or marked sessions as a numeric amount).
+    final selectedValue = counted(d) && !counted(details)
+        ? (doneToday == true ? 1 : 0)
+        : !counted(d) && counted(details)
+            ? 0
+            : todayValue;
     final completed = switch (d?.method) {
-      'numeric' => todayValue >= d!.target,
+      'numeric' => selectedValue >= d!.target,
       'checklist' =>
         d!.steps.every((s) => todayCompletedStepIds.contains(s.id)),
       _ => doneToday,
@@ -5892,7 +5903,7 @@ class BackendGoal {
       weeklyProgressAvailable: false,
       lastLoggedOn: lastLoggedOn,
       doneToday: completed,
-      todayValue: todayValue,
+      todayValue: selectedValue,
       todayCompletedStepIds: todayCompletedStepIds,
       streakDays: streakDays,
       isDue: d?.isDueOn(on) ?? true,
@@ -5902,6 +5913,13 @@ class BackendGoal {
 
   BackendGoal withProgress(BackendHabitLog log) {
     final day = DateTime.tryParse(log.loggedOn)?.weekday;
+    final counted = details?.method == 'yes_no' &&
+        details?.recurrence == 'weekly' &&
+        details?.weeklyTarget != null;
+    int sessions(bool done, int value) =>
+        !done ? 0 : (counted && value > 0 ? value : 1);
+    final delta =
+        sessions(log.done, log.value) - sessions(doneToday == true, todayValue);
     final days = completedWeekdays.toSet();
     if (day != null && isDue) {
       log.done ? days.add(day) : days.remove(day);
@@ -5913,8 +5931,7 @@ class BackendGoal {
       targetPerWeek: targetPerWeek,
       isActive: isActive,
       doneThisWeek: isDue
-          ? (doneThisWeek + (log.done ? 1 : 0) - (doneToday == true ? 1 : 0))
-              .clamp(0, 7)
+          ? (doneThisWeek + delta).clamp(0, counted ? 7000000 : 7)
           : doneThisWeek,
       completedWeekdays: days.toList()..sort(),
       weeklyProgressAvailable: weeklyProgressAvailable,

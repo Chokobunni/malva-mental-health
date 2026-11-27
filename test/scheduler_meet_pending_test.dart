@@ -119,6 +119,10 @@ http.Client _pendingMeetClient() {
 void main() {
   group('Penjadwalan paket saat Meet belum siap', () {
     testWidgets('pasien tetap dapat memilih tanggal dan jam', (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: _pendingMeetClient(),

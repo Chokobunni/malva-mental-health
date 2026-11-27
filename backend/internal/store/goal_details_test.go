@@ -258,7 +258,7 @@ func TestGoalFlexibleWeeklyQuota(t *testing.T) {
 	if got := goalStreak(d, logs[:3], goalTestDate("2026-12-01"), goalTestDate("2026-12-01")); got != 3 {
 		t.Fatalf("zero quota=%d", got)
 	}
-	for _, raw := range []string{`{"weekly_target":-1}`, `{"weekly_target":8}`} {
+	for _, raw := range []string{`{"weekly_target":-1}`, `{"weekly_target":1001}`} {
 		_ = json.Unmarshal([]byte(raw), d)
 		if ValidateGoalDetails(d) == nil {
 			t.Fatal("invalid quota accepted", raw)

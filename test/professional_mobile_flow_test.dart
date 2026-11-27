@@ -257,7 +257,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(tester.getTopLeft(find.text('Klinis')).dy,
         lessThan(tester.getTopLeft(find.text('Operasional')).dy));
-    expect(tester.getTopLeft(find.text('Earnings')).dy,
+    expect(tester.getTopLeft(find.text('Pendapatan')).dy,
         lessThan(tester.getTopLeft(find.text('Ketersediaan & harga')).dy));
     await tester.scrollUntilVisible(find.text('Ketersediaan & harga'), 200,
         scrollable: find.byType(Scrollable).first);

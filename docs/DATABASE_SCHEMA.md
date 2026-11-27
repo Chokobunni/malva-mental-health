@@ -990,7 +990,7 @@ Log pengiriman blast SOS per kontak (channel WhatsApp via Fonnte).
 
 ### 3.40 goals (migrasi 010)
 
-Refinement2026-11-13 adds no table/column: optional `details.weekly_target`0–7
+Refinement2026-11-13 adds no table/column: optional `details.weekly_target`0–1000
 and `recurrence: monthly` reuse JSONB introduced in041. Quota absence preserves
 weekday semantics; monthly/flexible configurations store weekdays[] canonically.
 `completed_weekdays` is computed from real habit logs, never a stored counter.
@@ -1123,3 +1123,10 @@ dapat berlaku pada beberapa layanan. Migrasi 045 menambahkan batas opsional
 `professional_pricing.patient_capacity`. Migrasi 046 menyimpan pilihan jadwal
 tambahan checkout di `package_checkout_slots`, unik per booking dan waktu
 mulai, dengan hasil pemrosesan dan ID sesi yang dibuat.
+
+
+Goal session refinement (2026-11-27) adds no columns: counted flexible weekly
+`yes_no` session totals use negative `habit_logs.value = -(sessions+1)` as an
+internal provenance marker. API values remain nonnegative. Unmarked historical
+rows count as one done session, including prior numeric logs after method edits;
+marked sessions never become numeric amounts when changing methods.

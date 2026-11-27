@@ -97,8 +97,8 @@ type CareSession struct {
 const carePackageColumns = `cp.id, cp.patient_id, cp.professional_id, cp.booking_id,
 	cp.total_sessions, cp.validity_days, cp.price, cp.status,
 	cp.starts_at, cp.expires_at, cp.created_at,
-	` + `(SELECT COUNT(*) FROM care_sessions
-		WHERE package_id = cp.id AND ` + careSessionUsesQuotaSQL + `),` +
+	` + `(SELECT COUNT(*) FROM care_sessions cs
+		WHERE cs.package_id = cp.id AND ` + careSessionUsesQuotaSQL + `),` +
 	`COALESCE(pat.display_name, ''), COALESCE(pro.display_name, ''),
 	COALESCE((SELECT pc.photo_intro_url FROM professional_credentials pc WHERE pc.user_id = cp.professional_id), '')`
 
@@ -595,7 +595,7 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	if cs.PackageID != nil && *cs.PackageID != "" {
 		var pkg CarePackage
 		err := tx.QueryRowContext(ctx, `SELECT status, expires_at, total_sessions,
-			(SELECT COUNT(*) FROM care_sessions WHERE package_id = care_packages.id
+			(SELECT COUNT(*) FROM care_sessions cs WHERE cs.package_id = care_packages.id
 			  AND `+careSessionUsesQuotaSQL+`)
 			FROM care_packages WHERE id = $1 FOR UPDATE`, *cs.PackageID).
 			Scan(&pkg.Status, &pkg.ExpiresAt, &pkg.TotalSessions, &pkg.UsedSessions)
@@ -957,6 +957,43 @@ func deactivateCancelledOneTimeLink(ctx context.Context, tx *sql.Tx, sessionID s
 		  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.patient_id=l.patient_id AND b.professional_id=l.professional_id
 		    AND (b.status='pending' OR (b.status='paid' AND NOT EXISTS (SELECT 1 FROM care_sessions terminal WHERE terminal.booking_id=b.id
 		      AND terminal.status IN ('completed','no_show','cancelled_by_patient','cancelled_by_professional','expired_unpaid')))))`, sessionID)
+	return err
+}
+
+func lockChatAttendanceSession(ctx context.Context, tx *sql.Tx, msg ChatMessage, sentAt time.Time) (string, string, error) {
+	if msg.Kind != "text" && msg.Kind != "file" && msg.Kind != "voice" && msg.Kind != "attachment" {
+		return "", "", nil
+	}
+	role := ""
+	switch msg.SenderID {
+	case msg.PatientID:
+		role = "patient"
+	case msg.ProfessionalID:
+		role = "professional"
+	default:
+		return "", "", nil
+	}
+	var id string
+	err := tx.QueryRowContext(ctx, `SELECT cs.id FROM care_sessions cs
+		WHERE cs.patient_id=$1 AND cs.professional_id=$2 AND cs.status='scheduled'
+		  AND cs.scheduled_at <= $3 AND $3 < cs.scheduled_at + make_interval(mins => cs.duration_minutes)
+		  AND `+careSessionPackageValidSQL+`
+		ORDER BY cs.scheduled_at DESC, cs.id LIMIT 1 FOR UPDATE OF cs`,
+		msg.PatientID, msg.ProfessionalID, sentAt).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", nil
+	}
+	return id, role, err
+}
+
+func applyChatAttendance(ctx context.Context, tx *sql.Tx, sessionID, role string, sentAt time.Time) error {
+	legacy := ""
+	if role == "professional" {
+		legacy = ", attended_marked_at=COALESCE(attended_marked_at,$2)"
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE care_sessions
+		SET `+role+`_attendance='attended', `+role+`_attendance_marked_at=$2, updated_at=$2`+legacy+`
+		WHERE id=$1 AND `+role+`_attendance<>'attended'`, sessionID, sentAt)
 	return err
 }
 
@@ -1705,8 +1742,11 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 	return
 }
 
-const careSessionUsesQuotaSQL = `(status IN ('scheduled','completed','no_show')
-	AND NOT (status='no_show' AND patient_attendance='attended' AND professional_attendance='absent'))`
+const careSessionUsesQuotaSQL = `((cs.status IN ('scheduled','completed','no_show')
+	AND NOT (cs.status='no_show' AND cs.patient_attendance='attended' AND cs.professional_attendance='absent'))
+	OR (cs.status='cancelled_by_patient' AND EXISTS (
+		SELECT 1 FROM care_refunds forfeited WHERE forfeited.idempotency_key='` + forfeitedCreditPrefix + `' || cs.id::text
+	)))`
 
 // ============================================================
 // LEDGER REFUND/KREDIT (care_refunds) + IDEMPOTENSI WEBHOOK

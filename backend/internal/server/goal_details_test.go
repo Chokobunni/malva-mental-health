@@ -108,7 +108,7 @@ func TestGoalWeeklyQuotaHTTPPersistenceAndMonthly(t *testing.T) {
 	if out.Code != 200 || len(listed.Goals) != 1 || len(listed.Goals[0].CompletedWeekdays) != 1 || listed.Goals[0].CompletedWeekdays[0] != 1 || listed.Goals[0].FailedToday {
 		t.Fatalf("actual days %d %s", out.Code, out.Body)
 	}
-	for _, quota := range []any{-1, 8, 1.5} {
+	for _, quota := range []any{-1, 1001, 1.5} {
 		details["weekly_target"] = quota
 		out = f.call(t, "PATCH", "/v1/goals/"+id, "patient", f.patient.ID, map[string]any{"details": details})
 		if out.Code != 400 {

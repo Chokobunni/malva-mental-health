@@ -12,8 +12,72 @@ import '../../widgets/diary_body.dart';
 import '../../widgets/care_reference_widgets.dart';
 import '../../services/malva_api_client.dart';
 import '../../services/weekly_summary_service.dart';
+import '../../services/medication_reminder_service.dart';
 import '../../theme.dart';
 import '../../time/wib.dart';
+
+/// A display-only snapshot: never includes medication IDs or dose logs.
+Map<String, dynamic> sharedMedicationSnapshot(Medication med,
+    {String reminderTime = '', String relationToMeal = '', DateTime? asOf}) {
+  final schedule = med.schedule;
+  final time = switch (schedule) {
+    final s? when s.intervalHours > 0 => 'Setiap ${s.intervalHours} jam',
+    final s? when s.intervalDays > 1 =>
+      'Setiap ${s.intervalDays} hari • ${s.times.join(', ')}',
+    final s? when s.intervalMonths > 0 =>
+      'Setiap ${s.intervalMonths} bulan • ${s.times.join(', ')}',
+    final s? when s.times.isNotEmpty => [
+        s.times.join(', '),
+        if (s.weekdays.isNotEmpty && s.weekdays.length < 7)
+          s.weekdays
+              .where((d) => d >= 1 && d <= 7)
+              .map((d) => const [
+                    'Sen',
+                    'Sel',
+                    'Rab',
+                    'Kam',
+                    'Jum',
+                    'Sab',
+                    'Min'
+                  ][d - 1])
+              .join(', ')
+      ].join(' • '),
+    _ => reminderTime.isNotEmpty
+        ? reminderTime
+        : med.reminders.map((r) => r.label).join(', '),
+  };
+  final now = asOf ?? wibNow();
+  final doses = schedule == null
+      ? (time.isEmpty
+          ? 0
+          : med.reminders.isEmpty
+              ? 1
+              : med.reminders.length)
+      : MedicationReminderService.routineOccurrences(schedule,
+              now: now, until: now.add(const Duration(days: 1)))
+          .length;
+  final units = doses * med.unitsPerDose;
+  final daily = schedule == null ||
+      (schedule.intervalMonths == 0 &&
+          schedule.intervalDays <= 1 &&
+          schedule.weekdays.length == 7);
+  return {
+    'name': med.name,
+    'dosage': med.dosage,
+    'form': med.form,
+    'reminder_time': reminderTime,
+    'schedule_label': time,
+    'relation_to_meal': relationToMeal.isNotEmpty
+        ? relationToMeal
+        : med.reminders.firstOrNull?.relationToMeal ?? '',
+    'source': med.source,
+    'current_stock': med.currentStock,
+    if (daily && units > 0 && med.currentStock >= 0)
+      'approximate_days': med.currentStock ~/ units,
+    if (schedule?.instructions.trim().isNotEmpty ?? false)
+      'instructions': schedule!.instructions.trim(),
+  };
+}
 
 final chatDiaryEntryProvider =
     FutureProvider.autoDispose.family<BackendDiaryEntry, String>((ref, id) {
@@ -735,74 +799,114 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
               fontWeight: FontWeight.w700,
               fontSize: 11)));
 
-  Widget _recordTimestamp() => Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          const Icon(Icons.calendar_month_outlined, size: 13, color: _purple),
-          const SizedBox(width: 4),
-          Text(formatWibDate(widget.message.timestamp),
-              style: const TextStyle(color: _ink, fontSize: 11)),
-        ]),
-        const SizedBox(height: 3),
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          const Icon(Icons.schedule, size: 13, color: _purple),
-          const SizedBox(width: 4),
-          Text(formatWibBubbleTime(widget.message.timestamp),
-              style: const TextStyle(color: _muted, fontSize: 10)),
-        ]),
-      ]));
-
-  List<Widget> _medications() => [
-        _recordTimestamp(),
-        _heading('DAFTAR OBAT AKTIF & RESEP', CupertinoIcons.capsule,
-            color: _purple, compact: true, rotation: -.7854),
-        for (final med in _maps(_meta['medications'] ?? _meta['medication']))
-          _white(
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              _tile(CupertinoIcons.capsule_fill, const Color(0xFF4188DE),
-                  rotation: -.7854),
-              const SizedBox(width: 9),
-              Expanded(
-                  child: Text(_text(med, 'name', 'Obat'),
+  List<Widget> _medications() {
+    final medications = _maps(_meta['medications'] ?? _meta['medication']);
+    final adherence =
+        _number(_meta['medication_adherence'], maximum: 100, integer: true);
+    return [
+      LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      _tile(CupertinoIcons.capsule, _purple,
+                          size: 34, rotation: -.7854),
+                      const SizedBox(width: 10),
+                      const Text('Obat Aktif',
+                          style: TextStyle(
+                              color: _ink,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800))
+                    ]),
+                    if (adherence != null)
+                      _chip('Kepatuhan ${adherence.toInt()}% (7 hari)', _purple,
+                          fontSize: 11),
+                  ])),
+      const SizedBox(height: 14),
+      if (medications.isEmpty)
+        const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14),
+            child: Text('Data obat tidak tersedia.',
+                style: TextStyle(color: _muted))),
+      for (final med in medications) ...[
+        _white(LayoutBuilder(builder: (context, constraints) {
+          final source = sharedMedicationSourceLabel(med['source']);
+          final patient = source == 'Pasien';
+          final tone = patient ? _mint : _purple;
+          final title = [_text(med, 'name', 'Obat'), _text(med, 'dosage')]
+              .where((s) => s.trim().isNotEmpty)
+              .join(' ');
+          final details = [
+            _text(med, 'schedule_label', _text(med, 'reminder_time')),
+            _text(med, 'form'),
+            _text(med, 'relation_to_meal')
+          ].where((s) => s.trim().isNotEmpty).join(' • ');
+          final stock = _number(med['current_stock'], integer: true);
+          final days = _number(med['approximate_days'], integer: true);
+          final stockWidget =
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            if (stock != null)
+              _chip('Sisa ${stock.toInt()}', _purple, fontSize: 11),
+            if (stock != null && days != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Text('± ${days.toInt()} hari',
+                      style: const TextStyle(
+                          color: Color(0xFF71808A), fontSize: 11)))
+          ]);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _tile(Icons.medical_services_outlined, tone, size: 38),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(title,
                       style: const TextStyle(
                           color: _ink,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12))),
-              if (_text(med, 'form').isNotEmpty)
-                _chip(_text(med, 'form'), _muted, fontSize: 9),
-            ]),
-            const SizedBox(height: 12),
-            Row(children: [
-              if (_text(med, 'dosage').isNotEmpty)
-                _chip(_text(med, 'dosage'), _purple),
-              const Spacer(),
-              if (_text(med, 'reminder_time').isNotEmpty) ...[
-                const Icon(Icons.schedule, color: _muted, size: 13),
-                const SizedBox(width: 3),
-                Flexible(
-                    child: Text(_text(med, 'reminder_time'),
-                        style: const TextStyle(color: _muted, fontSize: 11))),
-              ],
-            ]),
-            if (sharedMedicationSourceLabel(med['source']).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: _chip(
-                    sharedMedicationSourceLabel(med['source']), _purple,
-                    fontSize: 9),
-              ),
-            if (_text(med, 'relation_to_meal').isNotEmpty)
-              Padding(
-                  padding: const EdgeInsets.only(top: 9),
-                  child: Text(_text(med, 'relation_to_meal'),
-                      style: const TextStyle(
-                          color: _muted,
-                          fontSize: 10,
-                          fontStyle: FontStyle.italic))),
-          ])),
-      ];
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14)),
+                  if (details.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Text(details,
+                            style: const TextStyle(
+                                color: Color(0xFF596672),
+                                fontSize: 12,
+                                height: 1.4))),
+                  if (_text(med, 'instructions').isNotEmpty)
+                    Text(_text(med, 'instructions'),
+                        style: const TextStyle(color: _muted, fontSize: 11)),
+                  if (source.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 9),
+                        child: _chip(
+                            patient ? 'Input Pasien' : 'Resep Profesional',
+                            tone,
+                            fontSize: 10)),
+                  if (constraints.maxWidth < 290 && stock != null)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: stockWidget),
+                ])),
+            if (constraints.maxWidth >= 290 && stock != null) ...[
+              const SizedBox(width: 8),
+              stockWidget
+            ],
+          ]);
+        })),
+        const SizedBox(height: 10),
+      ],
+      Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+              '${formatWibDate(widget.message.timestamp)} • ${formatWibBubbleTime(widget.message.timestamp)}',
+              style: const TextStyle(color: _muted, fontSize: 10))),
+    ];
+  }
 
   List<Widget> _diary() {
     final id = chatDiaryReference(widget.message);
@@ -911,10 +1015,21 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: const Color(0xFFF8F1FC),
+            color: const {'prescription', 'medication'}
+                    .contains(widget.message.kind)
+                ? Colors.white
+                : const Color(0xFFF8F1FC),
             boxShadow: widget.message.kind == 'diary' ? careSoftShadow : null,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFEDE4F7))),
+            border: Border.all(
+                color: const {'prescription', 'medication'}
+                        .contains(widget.message.kind)
+                    ? const Color(0xFFDCCBE4)
+                    : const Color(0xFFEDE4F7),
+                width: const {'prescription', 'medication'}
+                        .contains(widget.message.kind)
+                    ? 1.5
+                    : 1)),
         child: InkWell(
             onTap: widget.onOpenDiary ?? (record ? widget.onOpenRecord : null),
             borderRadius: BorderRadius.circular(18),

@@ -53,6 +53,13 @@ Home pasien mengikuti referensi dengan check-in5langkah (mood, obat, tidur, ener
 | FEAT-025 | Therapy worksheet (simpan/bagikan) | Pasien, Profesional | `/v1/therapy-submissions` | Aktif |
 | FEAT-026 | Timeline aktivitas | Semua | `GET /v1/timeline` | Aktif |
 
+Ringkasan Target & Kebiasaan menghitung persentase harian hanya dari target yang
+terjadwal pada tanggal WIB terpilih. Target mingguan fleksibel memiliki ringkasan
+sesi terpisah. Ya/Tidak mingguan fleksibel mendukung beberapa sesi per hari lewat
+Ya dan Undo (tanggal terpilih); nilai dan sub-tugas tetap satu capaian per hari.
+Tambah dan Edit Target memakai pilihan metode, preset satuan, jadwal, frekuensi
+0–1.000 sesi per minggu, serta capaian mingguan aktual yang sama.
+
 ## 4. Booking & Pembayaran
 
 | FEAT-ID | Fitur | Role | Endpoint utama | Status |

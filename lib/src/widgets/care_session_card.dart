@@ -12,6 +12,7 @@ import '../screens/professional_session_notes_screen.dart';
 import '../screens/booking/booking_owner.dart';
 import '../screens/chat_screen.dart';
 import 'meet_join_button.dart';
+import 'patient_session_actions.dart';
 import 'session_attendance_actions.dart';
 import 'professional_avatar.dart';
 import 'friendly_error.dart';
@@ -365,80 +366,11 @@ class _SessionPresentationState extends State<_SessionPresentation> {
         if (c.otherActions != null)
           c.otherActions!
         else
-          Theme(
-              data:
-                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                  childrenPadding: const EdgeInsets.all(10),
-                  backgroundColor: const Color(0xfff8f5fb),
-                  collapsedBackgroundColor: const Color(0xfff8f5fb),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15)),
-                  collapsedShape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15)),
-                  title: const Text('AKSI LAIN',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                  children: [
-                    if (!s.isVideo && c.onReschedule != null)
-                      SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                              onPressed: c.onReschedule,
-                              icon: const Icon(Icons.event_repeat),
-                              label: const Text('Reschedule'))),
-                    LayoutBuilder(builder: (context, constraints) {
-                      final width = constraints.maxWidth >=
-                              MediaQuery.textScalerOf(context).scale(250)
-                          ? (constraints.maxWidth - 8) / 2
-                          : constraints.maxWidth;
-                      return Wrap(spacing: 8, runSpacing: 8, children: [
-                        if (c.onProfile != null)
-                          SizedBox(
-                              width: width,
-                              child: OutlinedButton.icon(
-                                  onPressed: c.onProfile,
-                                  icon: const Icon(Icons.person_outline),
-                                  label: const Text('Profil'))),
-                        if (c.onCancel != null)
-                          SizedBox(
-                              width: width,
-                              child: OutlinedButton.icon(
-                                  onPressed: c.onCancel,
-                                  icon: const Icon(Icons.cancel_outlined),
-                                  style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xffb52028),
-                                      backgroundColor: const Color(0xfffff3f3),
-                                      side: const BorderSide(
-                                          color: Color(0xfff2cfd1))),
-                                  label: const Text('Batal'))),
-                        if (s.isVideo && c.onReschedule != null)
-                          SizedBox(
-                              width: width,
-                              child: OutlinedButton.icon(
-                                  onPressed: c.onReschedule,
-                                  icon: const Icon(Icons.event_repeat),
-                                  label: const Text('Reschedule'))),
-                        if (s.isVideo && s.meetingUrl.trim().isNotEmpty)
-                          SizedBox(
-                              width: width,
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await Clipboard.setData(
-                                      ClipboardData(text: s.meetingUrl));
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Link sesi disalin.')),
-                                  );
-                                },
-                                icon: const Icon(Icons.link_rounded),
-                                label: const Text('Link'),
-                              )),
-                      ]);
-                    }),
-                  ]))
+          PatientSessionActions(
+              session: s,
+              onProfile: c.onProfile,
+              onCancel: c.onCancel,
+              onReschedule: c.onReschedule)
       ],
     ]);
     return Container(

@@ -340,6 +340,7 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 - Home pasien menampilkan Sesi berjalan dan Video call mendatang dengan foto profesional; kegagalan satu scope tidak menghilangkan scope lain, dan respons akun lama tidak boleh mengganti data akun baru.
 - Detail pasien dari jadwal profesional wajib membawa sesi/API profesional yang aktif. Aksi Hadir mengirim `attended`, mencatat marker kehadiran tanpa menutup sesi lebih awal atau mencatat earnings dua kali.
+- Pesan chat manual yang tersimpan pada jam mulai sampai sebelum akhir sesi menandai pengirim hadir. Pembatalan sebelum mulai menyimpan hasil kredit/penalti/refund atomik, dengan ambang pasien minimal satu jam WIB.
 - Push FCM memakai data-only, divalidasi pada foreground/background terhadap akun dan sesi aktif. Android tidak boleh merender otomatis payload legacy di luar scope. Bersihkan shade historis saat upgrade/start/ganti akun tanpa membatalkan alarm goals/obat yang valid. Retire backlog transport dengan cutoff WIB setelah seluruh worker berhenti; pertahankan riwayat in-app.
 - Retry pembayaran setelah token kedaluwarsa memakai token hasil refresh; rotasi dipersistensikan pada akun yang sama. Refresh yang ditolak harus selesai dengan error, tidak menunggu dirinya sendiri atau mengubah akun berikutnya.
 

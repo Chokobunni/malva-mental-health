@@ -383,7 +383,7 @@ func careSessionForRole(session store.CareSession, role string) store.CareSessio
 	return session
 }
 
-// updateCareSession: profesional (hadir/tidak, cancel, ringkasan) & pasien (cancel >=24 jam).
+// updateCareSession: profesional dan pasien mengelola kehadiran atau pembatalan sesi.
 func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	sessionID := r.PathValue("session_id")
 	cs, err := s.store.GetCareSession(r.Context(), sessionID)
@@ -456,64 +456,44 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
-	case status == "cancelled_by_professional":
-		// Profesional boleh batal kapan saja sebelum sesi mulai;
-		// kredit sesi otomatis kembali ke paket (bisa dijadwal ulang).
-		if !isProf {
-			writeError(w, http.StatusForbidden, errors.New("only professionals can cancel as professional"))
-			return
-		}
-		if cs.Status != "scheduled" {
-			writeError(w, http.StatusBadRequest, errors.New("hanya sesi terjadwal yang bisa dibatalkan"))
-			return
-		}
-		if time.Now().After(cs.ScheduledAt) {
-			writeError(w, http.StatusBadRequest, errors.New("sesi sudah lewat, tandai kehadiran sebagai gantinya"))
-			return
-		}
-		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, status, req.CancelReason, claims.Subject)
+	case (isProf && status == "cancelled_by_professional") || (isPatient && status == "cancelled_by_patient"):
+		reason := strings.TrimSpace(req.CancelReason)
+		updated, refund, changed, err := s.store.CancelCareSession(r.Context(), sessionID, claims.Role, claims.Subject, reason)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			if errors.Is(err, store.ErrCareSessionTerminal) || errors.Is(err, store.ErrCareCancellationStarted) {
+				writeUserError(w, http.StatusBadRequest, err.Error())
+			} else {
+				s.logger.Error("gagal menyimpan pembatalan sesi", "error", err)
+				writeUserError(w, http.StatusInternalServerError, "Pembatalan belum tersimpan. Silakan coba lagi.")
+			}
 			return
 		}
-		// Best-effort: batalkan event Google Calendar bila ada.
-		s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
-		// Ledger kredit otomatis (idempoten): bukti audit kuota kembali.
-		refund, creditErr := s.recordAutoCredit(r, updated)
-		if creditErr != nil {
-			s.logger.Warn("auto credit refund failed", "session", sessionID, "error", creditErr)
+		if changed {
+			s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
+			meta := map[string]string{"session_id": sessionID}
+			if isProf {
+				body := "Profesional membatalkan sesi terjadwal."
+				switch refund.Kind {
+				case "credit":
+					body += " Kredit sesimu kembali dan dapat dijadwalkan ulang."
+				case "refund":
+					body += " Pengembalian dana penuh sedang diproses."
+				}
+				s.notifyPatient(r, cs.PatientID, "session_cancelled_professional", "Sesi dibatalkan profesional", body, meta)
+			} else {
+				meta["patient_id"] = cs.PatientID
+				s.notifyPatient(r, cs.ProfessionalID, "session_cancelled_patient",
+					"Pasien membatalkan sesi", "Seorang pasien membatalkan sesi terjadwal.", meta)
+			}
 		}
-		s.notifyPatient(r, cs.PatientID, "session_cancelled_professional",
-			"Sesi dibatalkan profesional",
-			"Profesional membatalkan sesi. Kredit sesimu kembali dan bisa dijadwalkan ulang atau diminta sebagai refund.",
-			map[string]string{"session_id": sessionID})
-		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role), "refund": refund})
+		resp := map[string]any{"session": careSessionForRole(updated, claims.Role)}
+		if isProf {
+			resp["refund"] = refund
+		}
+		writeJSON(w, http.StatusOK, resp)
 		return
-	case status == "cancelled_by_patient":
-		if !isPatient {
-			writeError(w, http.StatusForbidden, errors.New("only patients can cancel as patient"))
-			return
-		}
-		if cs.Status != "scheduled" {
-			writeError(w, http.StatusBadRequest, errors.New("hanya sesi terjadwal yang bisa dibatalkan"))
-			return
-		}
-		// Pembatalan pasien <24 jam hangus.
-		if time.Until(cs.ScheduledAt) < 24*time.Hour {
-			writeError(w, http.StatusBadRequest, errors.New("pembatalan kurang dari 24 jam sebelum sesi: sesi hangus. Hubungi sesi atau tandai tidak hadir"))
-			return
-		}
-		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, status, req.CancelReason, claims.Subject)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		// Best-effort: batalkan event Google Calendar bila ada.
-		s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
-		s.notifyPatient(r, cs.ProfessionalID, "session_cancelled_patient",
-			"Pasien membatalkan sesi", "Seorang pasien membatalkan sesi terjadwal.",
-			map[string]string{"session_id": sessionID, "patient_id": cs.PatientID})
-		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
+	case status == "cancelled_by_professional" || status == "cancelled_by_patient":
+		writeUserError(w, http.StatusForbidden, "Anda tidak berhak membatalkan sebagai peran ini.")
 		return
 	default:
 		writeError(w, http.StatusBadRequest, errors.New("status tidak didukung untuk peran ini"))
@@ -521,7 +501,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	}
 }
 
-// rescheduleCareSession: pasien >=24 jam sebelum; profesional kapan saja sebelum mulai.
+// rescheduleCareSession: pasien >=1 jam sebelum; profesional kapan saja sebelum mulai.
 func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	sessionID := r.PathValue("session_id")
 	cs, err := s.store.GetCareSession(r.Context(), sessionID)
@@ -545,11 +525,12 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 		writeError(w, http.StatusBadRequest, errors.New("scheduled_at tidak valid (contoh: 2026-10-20T10:00)"))
 		return
 	}
-	if isPatient && time.Until(cs.ScheduledAt) < 24*time.Hour {
-		writeError(w, http.StatusBadRequest, errors.New("reschedule pasien minimal 24 jam sebelum sesi"))
+	now := clock.Now()
+	if isPatient && cs.ScheduledAt.Sub(now) < time.Hour {
+		writeError(w, http.StatusBadRequest, errors.New("reschedule pasien minimal 1 jam sebelum sesi"))
 		return
 	}
-	if isProf && time.Now().After(cs.ScheduledAt) {
+	if isProf && !now.Before(cs.ScheduledAt) {
 		writeError(w, http.StatusBadRequest, errors.New("sesi sudah lewat, tidak bisa di-reschedule"))
 		return
 	}
@@ -783,31 +764,6 @@ func defaultRefundKey(sessionID, kind string) string {
 	return fmt.Sprintf("refund:care_session:%s:%s", strings.TrimSpace(sessionID), kind)
 }
 
-// recordAutoCredit mencatat ledger kredit idempoten untuk sesi yang
-// dibatalkan profesional. Best-effort: kegagalan tidak menggagalkan cancel.
-func (s *Server) recordAutoCredit(r *http.Request, cs store.CareSession) (store.CareRefund, error) {
-	packageID := ""
-	amount := int64(0)
-	if cs.PackageID != nil && *cs.PackageID != "" {
-		packageID = *cs.PackageID
-		if pkg, err := s.store.GetCarePackage(r.Context(), packageID); err == nil {
-			amount = pkg.RefundValue
-		}
-	}
-	return s.store.RecordRefund(r.Context(), store.CareRefund{
-		PackageID:      packageID,
-		SessionID:      cs.ID,
-		PatientID:      cs.PatientID,
-		ProfessionalID: cs.ProfessionalID,
-		Amount:         amount,
-		Kind:           "credit",
-		Status:         "recorded",
-		Reason:         "Sesi dibatalkan profesional; kredit kuota dikembalikan",
-		IdempotencyKey: defaultRefundKey(cs.ID, "credit"),
-		CreatedBy:      cs.ProfessionalID,
-	})
-}
-
 // refundCareSession mengeksekusi refund uang (kind=refund) atau mencatat
 // kredit (kind=credit) untuk sesi yang dibatalkan profesional.
 // RBAC: pasien pemilik / profesional terkait / admin. Idempoten.
@@ -852,8 +808,31 @@ func (s *Server) refundCareSession(w http.ResponseWriter, r *http.Request, claim
 	}
 
 	idemKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if store.IsCareCancellationLedgerKey(idemKey) {
+		writeUserError(w, http.StatusBadRequest, "Kunci refund ini dicadangkan untuk pembatalan.")
+		return
+	}
 	if idemKey == "" {
 		idemKey = defaultRefundKey(sessionID, kind)
+	}
+
+	if kind == "credit" {
+		if cs.PackageID == nil || (cs.Status != "cancelled_by_professional" && cs.Status != "cancelled_by_patient") {
+			writeUserError(w, http.StatusBadRequest, "Kredit hanya tersedia untuk pembatalan sesi paket.")
+			return
+		}
+		if existing, found, err := s.store.GetRefundBySessionKind(r.Context(), sessionID, "credit"); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		} else if found {
+			writeJSON(w, http.StatusOK, map[string]any{"refund": existing})
+			return
+		}
+		// Old professional cancellations may predate ledger recording.
+		if cs.Status != "cancelled_by_professional" {
+			writeUserError(w, http.StatusBadRequest, "Kredit sesi ini tidak tersedia.")
+			return
+		}
 	}
 
 	if kind == "refund" {
