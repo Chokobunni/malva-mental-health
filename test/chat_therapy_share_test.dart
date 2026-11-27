@@ -298,6 +298,22 @@ void main() {
     }
     await _socketServer.close(force: true);
   });
+  for (final professional in [false, true]) {
+    testWidgets(
+        'empty consultation shows the supplied illustration ($professional)',
+        (tester) async {
+      await _open(tester, _ChatBackend(), professional: professional);
+      expect(find.text('Mulai percakapan'), findsOneWidget);
+      expect(
+          find.byWidgetPredicate((widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName ==
+                  'assets/reference/chat-empty.png'),
+          findsOneWidget);
+      await _close(tester);
+    });
+  }
   testWidgets(
       'single local screening share carries validated type score and safety',
       (tester) async {
@@ -400,7 +416,7 @@ void main() {
     expect(backend.shareCalls, 1);
     expect(backend.genericSendCalls, 0,
         reason: 'server share already creates the persisted chat message');
-    expect(find.text('Worksheet Latihan ABCDE dibagikan.'), findsOneWidget);
+    expect(find.text('Lihat riwayat'), findsOneWidget);
     await _close(tester);
   });
 
@@ -432,13 +448,10 @@ void main() {
       ..canShare = false;
     await _open(tester, backend, professional: true);
     expect(find.byTooltip('Lampirkan berkas'), findsOneWidget);
-    await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
+    await tester.tap(find.text('Lihat riwayat'));
     await tester.pumpAndSettle();
-    expect(find.text('Latihan ABCDE'), findsOneWidget);
     expect(find.text('2026-11-05T09:00:00+07:00'), findsNothing);
-    expect(find.text('Rincian Hasil'), findsOneWidget);
-    await tester.tap(find.text('Latihan ABCDE'));
-    await tester.pumpAndSettle();
+    expect(find.text('DETAIL JAWABAN SESI'), findsOneWidget);
     expect(find.text('Situasi latihan'), findsOneWidget);
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
@@ -554,8 +567,9 @@ void main() {
         expect(find.byType(BottomSheet), findsNothing);
         expect(find.text(module == 'who5' ? '10 / 25' : '28 / 42'),
             module == 'who5' ? findsOneWidget : findsNWidgets(3));
-        expect(
-            find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+        expect(find.textContaining('Dukungan aturan triage (CF)'),
+            module == 'who5' ? findsOneWidget : findsNothing);
+        expect(find.textContaining('Lihat Rincian Jawaban'), findsOneWidget);
         expect(find.text('Jawaban assessment dibagikan'), findsNothing);
       }
       await _close(tester);
@@ -573,14 +587,41 @@ void main() {
         backend.metadata = {
           'module_id': module,
           'title': 'Hasil lama',
-          'answers': backend.assessment['answers']
+          'answers': backend.assessment['answers'],
+          'shared_at': '2026-10-01T08:45:00+07:00',
         };
         await _open(tester, backend, professional: professional);
         expect(find.byType(TherapySubmissionView), findsNothing);
         expect(find.text(module == 'who5' ? '10 / 25' : '28 / 42'),
             module == 'who5' ? findsOneWidget : findsNWidgets(3));
-        expect(
-            find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+        expect(find.textContaining('Dukungan aturan triage (CF)'),
+            module == 'who5' ? findsOneWidget : findsNothing);
+        expect(find.text('Diisi pada 01/10/2026 • 08:45 WIB'), findsOneWidget);
+        await tester.tap(find.textContaining('Lihat Rincian Jawaban'));
+        await tester.pumpAndSettle();
+        expect(find.text('Tutup Rincian'), findsOneWidget);
+        if (professional) {
+          await tester.runAsync(() async {
+            _sockets.last.add(jsonEncode({
+              'type': 'chat_message_deleted',
+              'data': {
+                'id': 'message-1',
+                'patient_id': 'patient-1',
+                'professional_id': 'pro-1',
+              }
+            }));
+          });
+          final unavailable = find.text('Detail asesmen sudah tidak tersedia.');
+          for (var attempt = 0;
+              attempt < 100 && unavailable.evaluate().isEmpty;
+              attempt++) {
+            await tester.runAsync(
+                () => Future<void>.delayed(const Duration(milliseconds: 20)));
+            await tester.pumpAndSettle();
+          }
+          expect(unavailable, findsOneWidget);
+          expect(find.text('Tutup Rincian'), findsNothing);
+        }
         expect(tester.takeException(), isNull);
         await _close(tester);
       });

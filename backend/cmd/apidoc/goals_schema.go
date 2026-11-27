@@ -36,6 +36,14 @@ func writeGoalRequestBody(b *strings.Builder, method, path string) bool {
 		schema = "GoalWriteRequest"
 	case "POST /v1/habit-logs":
 		schema = "HabitLogRequest"
+		b.WriteString(`      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Wajib untuk session_action; ulangi kunci yang sama hanya untuk intent goal/tanggal/aksi yang sama.
+          schema:
+            type: string
+            maxLength: 128
+`)
 	default:
 		return false
 	}
@@ -172,7 +180,7 @@ const goalSchemas = `    GoalDetails:
     HabitLogRequest:
       type: object
       required: [goal_id]
-      description: Patch independen; field progress yang absen dipertahankan. Goal terkonfigurasi menolak tanggal mendatang/tidak terjadwal dan mematuhi lock_past.
+      description: Patch independen; field progress yang absen dipertahankan. Goal terkonfigurasi menolak tanggal mendatang/tidak terjadwal dan mematuhi lock_past. Aksi sesi frekuensi memakai Idempotency-Key.
       properties:
         goal_id:
           type: string
@@ -187,12 +195,16 @@ const goalSchemas = `    GoalDetails:
           description: Alias kompatibilitas jika logged_on kosong.
         done:
           type: boolean
-          description: Default true untuk yes/no. Numeric/checklist dihitung dari target/seluruh langkah saat ini.
+          description: Default true untuk yes/no. Numeric/checklist jadwal tetap dihitung dari target/seluruh langkah. Target Frekuensi memakai session_action untuk menyelesaikan sesi.
         value:
           type: integer
           minimum: 0
           maximum: 1000000
-          description: Nilai numeric atau jumlah sesi harian yes/no weekly fleksibel; API selalu nonnegatif. Jika absen, yes/no tetap idempoten.
+          description: Nilai numeric atau jumlah sesi harian yes/no weekly fleksibel; API selalu nonnegatif.
+        session_action:
+          type: string
+          enum: [complete, undo]
+          description: Hanya Target Frekuensi semua metode. complete menambah satu sesi dan mereset progres harian; undo mengurangi sesi terakhir dalam minggu WIB sampai logged_on, mempertahankan progres parsial. Wajib Idempotency-Key maksimal 128 karakter, tidak dapat digabung dengan value/completed_step_ids.
         completed_step_ids:
           type: array
           maxItems: 100
@@ -219,7 +231,7 @@ const goalSchemas = `    GoalDetails:
               format: date-time
             done_this_week:
               type: integer
-              description: Sesi aktual minggu pilihan sampai on untuk yes/no weekly fleksibel; metode lain tetap menghitung tanggal selesai.
+              description: Sesi aktual minggu pilihan sampai on untuk Target Frekuensi semua metode; jadwal tetap menghitung tanggal selesai.
             completed_weekdays:
               type: array
               uniqueItems: true
@@ -237,6 +249,10 @@ const goalSchemas = `    GoalDetails:
             today_value:
               type: integer
               description: Nilai numeric atau jumlah sesi yes/no weekly fleksibel tanggal on; nol bila belum dicatat.
+            today_sessions:
+              type: integer
+              minimum: 0
+              description: Sesi selesai pada tanggal on, terpisah dari progres numeric/sub-tugas.
             today_completed_step_ids:
               type: array
               items:
@@ -268,6 +284,10 @@ const goalSchemas = `    GoalDetails:
           type: boolean
         value:
           type: integer
+        sessions:
+          type: integer
+          minimum: 0
+          description: Jumlah sesi selesai pada logged_on. Progres numeric/sub-tugas tetap pada field masing-masing.
         completed_step_ids:
           type: array
           items:

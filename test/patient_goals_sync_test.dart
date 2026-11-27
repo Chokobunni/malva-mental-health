@@ -128,7 +128,7 @@ void main() {
             ]
           }));
       expect(find.text('Minggu ini'), findsOneWidget);
-      expect(find.text(target == 0 ? '2 kali' : '2/4 kali'), findsOneWidget);
+      expect(find.text(target == 0 ? '2 sesi' : '2/4 sesi'), findsOneWidget);
       expect(find.text('2/3 kali'), findsNothing);
       final segments = t.widgetList<Container>(find.byWidgetPredicate((w) =>
           w is Container &&

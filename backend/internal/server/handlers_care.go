@@ -36,6 +36,7 @@ type habitLogRequest struct {
 	Done             *bool     `json:"done"`
 	Value            *int      `json:"value"`
 	CompletedStepIDs *[]string `json:"completed_step_ids"`
+	SessionAction    string    `json:"session_action"`
 }
 
 // resolvePatientScope menentukan patient_id yang boleh diakses:
@@ -258,7 +259,8 @@ func (s *Server) logHabit(w http.ResponseWriter, r *http.Request, claims auth.Cl
 		done = *req.Done
 	}
 	log, err := s.store.LogHabit(r.Context(), claims.Subject, goalID, logged, done,
-		store.HabitProgressPatch{Value: req.Value, CompletedStepIDs: req.CompletedStepIDs})
+		store.HabitProgressPatch{Value: req.Value, CompletedStepIDs: req.CompletedStepIDs,
+			SessionAction: req.SessionAction, IdempotencyKey: r.Header.Get("Idempotency-Key")})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, errors.New("goal tidak ditemukan"))

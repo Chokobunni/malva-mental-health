@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ai/assessment_interpretation.dart';
@@ -21,6 +22,8 @@ import '../time/wib.dart';
 // agar lapisan interpretasi (CF) bisa memakainya tanpa impor melingkar.
 // Diekspor ulang supaya pemanggil lama (mis. layar profesional) tetap jalan.
 export '../ai/assessment_scoring.dart';
+
+part 'therapy_submission_detail.dart';
 
 /// Waktu therapy record (`d/M/yyyy HH:mm`) dalam waktu WIB.
 ///
@@ -3079,6 +3082,8 @@ class TherapySubmissionsScreen extends ConsumerStatefulWidget {
 
 class _TherapySubmissionsScreenState
     extends ConsumerState<TherapySubmissionsScreen> {
+  String _query = '';
+  String _status = 'all';
   List<BackendTherapySubmission> _items = const [];
   bool _isLoading = true;
   String? _error;
@@ -3193,131 +3198,240 @@ class _TherapySubmissionsScreenState
       return const Scaffold(
           body: Center(child: Text('Sesi akun telah berubah.')));
     }
-    final items = _therapyItems;
+    final all = _therapyItems;
+    final items = all
+        .where((item) =>
+            (_status == 'all' || (_status == 'shared') == item.isShared) &&
+            item.title.toLowerCase().contains(_query.toLowerCase().trim()))
+        .toList();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Riwayat Terapi'),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Muat ulang',
-            onPressed: _isLoading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_error!, textAlign: TextAlign.center),
-                  ),
-                )
-              : items.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.self_improvement_rounded,
-                      title: 'Belum ada riwayat Terapi',
-                      subtitle:
-                          'Buka menu Terapi Psikologis, pilih modul terapi, '
-                          'isi lembar kerja, lalu simpan. Hasilnya muncul di sini. '
-                          'Riwayat Asesmen (DASS-21/WHO-5) ada di halaman '
-                          'Asesmen.',
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(18),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          final created = item.createdDateTime;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: SoftCard(
-                              onTap: () =>
-                                  showTherapyRecordDetail(context, item),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(item.title,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w900)),
-                                      ),
-                                      StatusPill(
-                                        label: item.isShared
-                                            ? 'Dibagikan'
-                                            : 'Tersimpan',
-                                        color: item.isShared
-                                            ? MalvaColors.mint
-                                            : MalvaColors.amber,
-                                        icon: item.isShared
-                                            ? Icons.send_rounded
-                                            : Icons.folder_rounded,
-                                      ),
-                                    ],
-                                  ),
-                                  if (item.summary.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(item.summary,
-                                        style: const TextStyle(
-                                            fontSize: 12.5,
-                                            fontStyle: FontStyle.italic)),
-                                  ],
-                                  if (created != null) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      formatTherapyRecordDate(created),
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      OutlinedButton.icon(
-                                        onPressed: findTherapyModuleById(
-                                                    item.moduleId) ==
-                                                null
-                                            ? null
-                                            : () => _editTherapyRecord(
-                                                context, item),
-                                        icon: const Icon(Icons.edit_outlined,
-                                            size: 16),
-                                        label: const Text('Edit'),
-                                      ),
-                                      OutlinedButton.icon(
-                                        onPressed: () => _share(item),
-                                        icon: const Icon(Icons.send_rounded,
-                                            size: 16),
-                                        label: const Text('Bagikan'),
-                                      ),
-                                      OutlinedButton.icon(
-                                        onPressed: () => _delete(item),
-                                        icon: const Icon(
-                                            Icons.delete_outline_rounded,
-                                            size: 16),
-                                        label: const Text('Hapus'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+      backgroundColor: const Color(0xfffaf7fc),
+      appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(150),
+          child: Container(
+            decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [Color(0xff9334ac), Color(0xff652078)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(26))),
+            child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 19),
+                  child: Column(children: [
+                    Row(children: [
+                      IconButton(
+                          style: IconButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: .12)),
+                          onPressed: () => Navigator.maybePop(context),
+                          icon: const Icon(Icons.arrow_back_rounded,
+                              color: Colors.white)),
+                      const Expanded(
+                          child: Center(
+                              child: Text('Riwayat Terapi',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800)))),
+                      IconButton(
+                          tooltip: 'Muat ulang',
+                          onPressed: _isLoading ? null : _load,
+                          style: IconButton.styleFrom(
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: .12)),
+                          icon: const Icon(Icons.refresh_rounded,
+                              color: Colors.white)),
+                    ]),
+                    const SizedBox(height: 12),
+                    TextField(
+                        onChanged: (value) => setState(() => _query = value),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Cari sesi terapi...',
+                          hintStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: .55)),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: .17),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 13),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(
+                                  color: Colors.white.withValues(alpha: .2))),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide:
+                                  const BorderSide(color: Colors.white70)),
+                        )),
+                  ]),
+                )),
+          )),
+      body: Column(children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(18, 15, 18, 13),
+            child: Row(children: [
+              for (final filter in [
+                ('all', 'Semua (${all.length})'),
+                ('saved', 'Tersimpan'),
+                ('shared', 'Dibagikan')
+              ]) ...[
+                if (filter.$1 != 'all') const SizedBox(width: 7),
+                Expanded(
+                    child: ChoiceChip(
+                  label:
+                      FittedBox(fit: BoxFit.scaleDown, child: Text(filter.$2)),
+                  selected: _status == filter.$1,
+                  showCheckmark: false,
+                  labelStyle: TextStyle(
+                      color: _status == filter.$1
+                          ? Colors.white
+                          : const Color(0xff52606e),
+                      fontWeight: FontWeight.w700),
+                  selectedColor: const Color(0xff9234ad),
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                      color: _status == filter.$1
+                          ? Colors.transparent
+                          : const Color(0xffe9e7ed)),
+                  shape: const StadiumBorder(),
+                  onSelected: (_) => setState(() => _status = filter.$1),
+                )),
+              ],
+            ])),
+        Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(_error!, textAlign: TextAlign.center)))
+                    : all.isEmpty
+                        ? const EmptyState(
+                            icon: Icons.self_improvement_rounded,
+                            title: 'Belum ada riwayat Terapi',
+                            subtitle:
+                                'Buka menu Terapi Psikologis, pilih modul terapi, isi lembar kerja, lalu simpan.')
+                        : items.isEmpty
+                            ? const Center(
+                                child: Text('Tidak ada riwayat yang cocok'))
+                            : RefreshIndicator(
+                                onRefresh: _load,
+                                child: ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        18, 2, 18, 20),
+                                    itemCount: items.length,
+                                    itemBuilder: (context, index) =>
+                                        _historyCard(items[index])))),
+      ]),
+    );
+  }
+
+  Widget _historyCard(BackendTherapySubmission item) {
+    final at = item.createdDateTime;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: const Color(0xfff1eaf6))),
+      child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(19),
+            onTap: () => showTherapyRecordDetail(context, item),
+            child: Padding(
+                padding: const EdgeInsets.all(15),
+                child: Column(children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    TherapyModuleIcon(
+                        module: findTherapyModuleById(item.moduleId), size: 40),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(item.title,
+                              style: const TextStyle(
+                                  color: Color(0xff202a38),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800)),
+                          if (at != null)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Row(children: [
+                                  const Icon(Icons.schedule_rounded,
+                                      color: Color(0xff98a4b2), size: 14),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                      child: Text(
+                                          '${formatWibDate(at)} • ${formatWibBubbleTime(at)}',
+                                          style: const TextStyle(
+                                              color: Color(0xff98a4b2),
+                                              fontSize: 11))),
+                                ])),
+                        ])),
+                    const SizedBox(width: 7),
+                    Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                            color: item.isShared
+                                ? const Color(0xffeafcf4)
+                                : const Color(0xfffffbea),
+                            border: Border.all(
+                                color: item.isShared
+                                    ? const Color(0xffc8edde)
+                                    : const Color(0xfff2e9bc)),
+                            borderRadius: BorderRadius.circular(20)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(
+                              item.isShared
+                                  ? Icons.send_outlined
+                                  : Icons.folder_outlined,
+                              size: 12,
+                              color: item.isShared
+                                  ? const Color(0xff178a70)
+                                  : const Color(0xffbb851c)),
+                          const SizedBox(width: 4),
+                          Text(item.isShared ? 'Dibagikan' : 'Tersimpan',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: item.isShared
+                                      ? const Color(0xff178a70)
+                                      : const Color(0xffbb851c))),
+                        ])),
+                  ]),
+                  const Divider(height: 27, color: Color(0xfff0f2f5)),
+                  Row(children: [
+                    Expanded(
+                        child: TextButton.icon(
+                            style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xfffaf5fe),
+                                foregroundColor: const Color(0xff903ea2),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12))),
+                            onPressed: () => _share(item),
+                            icon: const Icon(Icons.send_outlined, size: 17),
+                            label: const Text('Bagikan'))),
+                    const SizedBox(width: 9),
+                    OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xff697887),
+                            side: const BorderSide(color: Color(0xffe9edf0)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12))),
+                        onPressed: () => _delete(item),
+                        icon:
+                            const Icon(Icons.delete_outline_rounded, size: 17),
+                        label: const Text('Hapus')),
+                  ]),
+                ])),
+          )),
     );
   }
 }
@@ -3741,6 +3855,8 @@ class TherapySubmissionView extends StatelessWidget {
     this.sharedAt,
     this.initiallyExpanded = false,
     this.isShared = true,
+    this.standalone = false,
+    this.createdAt,
   });
 
   final String moduleId;
@@ -3750,10 +3866,15 @@ class TherapySubmissionView extends StatelessWidget {
   final String? sharedAt;
   final bool initiallyExpanded;
   final bool isShared;
+  final bool standalone;
+  final DateTime? createdAt;
 
   @override
   Widget build(BuildContext context) {
     final module = findTherapyModuleById(moduleId);
+    if (standalone && module?.isAssessment != true) {
+      return _TherapySubmissionSheet(view: this);
+    }
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     // Header ringkas: selalu terlihat & bisa di-tap untuk membuka detail.
@@ -3838,29 +3959,66 @@ class TherapySubmissionView extends StatelessWidget {
 }
 
 Future<void> showTherapyRecordDetail(
-    BuildContext context, BackendTherapySubmission record) {
-  final owner = ProviderScope.containerOf(context, listen: false)
-      .read(currentSessionProvider);
+        BuildContext context, BackendTherapySubmission record) =>
+    showTherapySubmissionDetail(context,
+        moduleId: record.moduleId,
+        title: record.title,
+        answers: record.answers,
+        summary: record.summary,
+        createdAt: record.createdDateTime,
+        isShared: record.isShared);
+
+Future<void> showTherapySubmissionDetail(
+  BuildContext context, {
+  required String moduleId,
+  required String title,
+  required Map<String, dynamic> answers,
+  String summary = '',
+  DateTime? createdAt,
+  bool isShared = true,
+}) {
+  (Object?, String?) ownerKey(AuthSession? session) =>
+      (session?.role, session?.backendUserId ?? session?.identifier);
+  final owner = ownerKey(ProviderScope.containerOf(context, listen: false)
+      .read(currentSessionProvider));
+  var invalidated = false;
   return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26))),
+      clipBehavior: Clip.antiAlias,
       builder: (sheetContext) => SafeArea(
-              child: ConstrainedBox(
-            constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(sheetContext).size.height * .85),
-            child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Consumer(builder: (context, ref, _) {
-                  if (ref.watch(currentSessionProvider) != owner)
-                    return const Text('Sesi akun telah berubah.');
-                  return TherapySubmissionView(
-                      moduleId: record.moduleId,
-                      title: record.title,
-                      answers: record.answers,
-                      summary: record.summary,
-                      sharedAt: record.sharedAt,
-                      isShared: record.isShared,
-                      initiallyExpanded: true);
-                })),
-          )));
+            top: false,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(sheetContext).height * .9),
+              child: Consumer(builder: (context, ref, _) {
+                ref.listen(authStateProvider, (_, next) {
+                  if (ownerKey(next.session) != owner && !invalidated) {
+                    invalidated = true;
+                    (context as Element).markNeedsBuild();
+                  }
+                });
+                if (invalidated ||
+                    ownerKey(ref.watch(currentSessionProvider)) != owner) {
+                  return const Center(child: Text('Sesi akun telah berubah.'));
+                }
+                final view = TherapySubmissionView(
+                    moduleId: moduleId,
+                    title: title,
+                    answers: answers,
+                    summary: summary,
+                    createdAt: createdAt,
+                    isShared: isShared,
+                    standalone: true,
+                    initiallyExpanded: true);
+                return findTherapyModuleById(moduleId)?.isAssessment == true
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.all(20), child: view)
+                    : view;
+              }),
+            ),
+          ));
 }

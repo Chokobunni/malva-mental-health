@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -38,6 +39,8 @@ type GoalStep struct {
 type HabitProgressPatch struct {
 	Value            *int
 	CompletedStepIDs *[]string
+	SessionAction    string
+	IdempotencyKey   string
 }
 
 func ValidateGoalDetails(d *GoalDetails) error {
@@ -91,7 +94,7 @@ func ValidateGoalDetails(d *GoalDetails) error {
 	}
 	ids := map[string]bool{}
 	for _, step := range d.Steps {
-		if strings.TrimSpace(step.ID) == "" || utf8.RuneCountInString(step.ID) > 64 || ids[step.ID] {
+		if strings.TrimSpace(step.ID) == "" || strings.HasPrefix(step.ID, goalSessionPrefix) || utf8.RuneCountInString(step.ID) > 64 || ids[step.ID] {
 			return errors.New("id langkah wajib unik dan maksimal 64 karakter")
 		}
 		if strings.TrimSpace(step.Label) == "" || utf8.RuneCountInString(step.Label) > 500 {
@@ -248,7 +251,14 @@ func validateHabitDate(d *GoalDetails, on, now time.Time) error {
 }
 
 func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProgressPatch) (HabitLog, error) {
+	sessions := goalLogSessions(d, current)
 	priorValue := current.Value
+	if countedWeeklyGoal(d) {
+		if _, marked := goalSessionMarker(current.CompletedStepIDs); marked {
+			priorValue = -sessions - 1
+		}
+		current.CompletedStepIDs = goalPublicSteps(current.CompletedStepIDs)
+	}
 	if current.Value < 0 {
 		current.Value = 0
 	}
@@ -274,6 +284,9 @@ func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProg
 		}
 		current.CompletedStepIDs = append([]string{}, (*p.CompletedStepIDs)...)
 	}
+	if frequencyGoal(d) && d.Method != "yes_no" {
+		current.CompletedStepIDs = withGoalSessions(current.CompletedStepIDs, sessions)
+	}
 	if current.CompletedStepIDs == nil {
 		current.CompletedStepIDs = []string{}
 	}
@@ -298,6 +311,9 @@ func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProg
 			}
 		case "numeric":
 			current.Done = current.Value >= d.Target
+			if frequencyGoal(d) {
+				current.Done = sessions > 0
+			}
 		case "checklist":
 			completed := map[string]bool{}
 			for _, id := range current.CompletedStepIDs {
@@ -309,6 +325,9 @@ func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProg
 					current.Done = false
 				}
 			}
+			if frequencyGoal(d) {
+				current.Done = sessions > 0
+			}
 		}
 	}
 	return current, nil
@@ -317,6 +336,9 @@ func applyHabitProgress(d *GoalDetails, current HabitLog, done bool, p HabitProg
 // goalLogDone projects numeric/checklist history against the current goal without
 // rewriting the stored progress when a target or step definition is edited.
 func goalLogDone(d *GoalDetails, l HabitLog) bool {
+	if frequencyGoal(d) {
+		return goalLogSessions(d, l) > 0
+	}
 	result, _ := applyHabitProgress(d, l, l.Done, HabitProgressPatch{})
 	return result.Done
 }
@@ -410,12 +432,64 @@ func countedWeeklyGoal(d *GoalDetails) bool {
 	return d != nil && d.Method == "yes_no" && d.Recurrence == "weekly" && d.WeeklyTarget != nil
 }
 
-func goalLogSessions(d *GoalDetails, l HabitLog) int {
-	if !goalLogDone(d, l) {
-		return 0
+func frequencyGoal(d *GoalDetails) bool {
+	return d != nil && d.Recurrence == "weekly" && d.WeeklyTarget != nil
+}
+
+// Session counts share the existing JSONB array, while API projections expose only real steps.
+const goalSessionPrefix = "~malva:sessions:"
+
+func goalSessionMarker(ids []string) (int, bool) {
+	for _, id := range ids {
+		if strings.HasPrefix(id, goalSessionPrefix) {
+			value, err := strconv.Atoi(strings.TrimPrefix(id, goalSessionPrefix))
+			return max(0, value), err == nil
+		}
 	}
-	if countedWeeklyGoal(d) && l.Value < 0 {
-		return -l.Value - 1
+	return 0, false
+}
+
+func goalPublicSteps(ids []string) []string {
+	steps := []string{}
+	for _, id := range ids {
+		if !strings.HasPrefix(id, goalSessionPrefix) {
+			steps = append(steps, id)
+		}
+	}
+	return steps
+}
+
+func withGoalSessions(ids []string, count int) []string {
+	return append(goalPublicSteps(ids), goalSessionPrefix+strconv.Itoa(count))
+}
+
+func goalLogSessions(d *GoalDetails, l HabitLog) int {
+	if frequencyGoal(d) {
+		if count, found := goalSessionMarker(l.CompletedStepIDs); found {
+			return count
+		}
+		if l.Value < 0 {
+			return -l.Value - 1
+		}
+	}
+	done := l.Done
+	if d != nil {
+		switch d.Method {
+		case "numeric":
+			done = l.Value >= d.Target
+		case "checklist":
+			steps := map[string]bool{}
+			for _, id := range l.CompletedStepIDs {
+				steps[id] = true
+			}
+			done = len(d.Steps) > 0
+			for _, step := range d.Steps {
+				done = done && steps[step.ID]
+			}
+		}
+	}
+	if !done {
+		return 0
 	}
 	return 1
 }
@@ -423,13 +497,7 @@ func goalLogSessions(d *GoalDetails, l HabitLog) int {
 // Values crossing the API boundary remain nonnegative and method appropriate.
 func goalPublicValue(d *GoalDetails, l HabitLog) int {
 	if countedWeeklyGoal(d) {
-		if l.Value < 0 {
-			return -l.Value - 1
-		}
-		if l.Done {
-			return 1
-		}
-		return 0
+		return goalLogSessions(d, l)
 	}
 	return max(l.Value, 0)
 }

@@ -71,7 +71,7 @@ void main() {
   });
 
   test(
-      'seven times per week includes each missed day for legacy and flexible goals',
+      'legacy daily target infers missed days while flexible session quota keeps saved logs',
       () {
     final legacy = BackendGoal.fromJson({
       'id': 'legacy-daily',
@@ -106,7 +106,7 @@ void main() {
       '2026-11-18',
       '2026-11-17'
     ]);
-    expect(history.values.every((entries) => entries.length == 2), isTrue);
+    expect(history.values.every((entries) => entries.length == 1), isTrue);
     expect(goalHistoryResult(history['2026-11-17']!.first), 'Tidak dilakukan');
     expect(goalHistoryResult(history['2026-11-22']!.first), 'Selesai');
   });

@@ -1406,6 +1406,8 @@ class MalvaApiClient {
     bool done = true,
     int? value,
     List<String>? completedStepIds,
+    String? sessionAction,
+    String? idempotencyKey,
   }) async {
     final payload = await _send(
       'POST',
@@ -1417,7 +1419,10 @@ class MalvaApiClient {
         'done': done,
         if (value != null) 'value': value,
         if (completedStepIds != null) 'completed_step_ids': completedStepIds,
+        if (sessionAction != null) 'session_action': sessionAction,
       },
+      extraHeaders:
+          idempotencyKey == null ? null : {'Idempotency-Key': idempotencyKey},
     );
     return BackendHabitLog.fromJson(
       _expectMap(payload['log'], 'Respons habit log tidak valid.'),
@@ -5884,6 +5889,7 @@ class BackendGoal {
     this.details,
     this.doneToday,
     this.todayValue = 0,
+    this.todaySessions,
     this.todayCompletedStepIds = const [],
     this.streakDays = 0,
     this.isDue = true,
@@ -5913,6 +5919,7 @@ class BackendGoal {
           : null,
       doneToday: json['done_today'] as bool?,
       todayValue: (json['today_value'] as num?)?.toInt() ?? 0,
+      todaySessions: (json['today_sessions'] as num?)?.toInt(),
       todayCompletedStepIds: (json['today_completed_step_ids'] as List? ?? [])
           .whereType<String>()
           .toList(growable: false),
@@ -5937,6 +5944,7 @@ class BackendGoal {
   final GoalDetails? details;
   final bool? doneToday;
   final int todayValue, streakDays;
+  final int? todaySessions;
   final List<String> todayCompletedStepIds;
   final bool isDue, failedToday;
   final DateTime? createdAt;
@@ -5958,16 +5966,23 @@ class BackendGoal {
     // Historical edits keep the selected log; never reinterpret its old numeric
     // amount as sessions (or marked sessions as a numeric amount).
     final selectedValue = counted(d) && !counted(details)
-        ? (doneToday == true ? 1 : 0)
+        ? (todaySessions ?? (doneToday == true ? 1 : 0))
         : !counted(d) && counted(details)
             ? 0
             : todayValue;
-    final completed = switch (d?.method) {
-      'numeric' => selectedValue >= d!.target,
-      'checklist' =>
-        d!.steps.every((s) => todayCompletedStepIds.contains(s.id)),
-      _ => doneToday,
-    };
+    final frequency = d?.recurrence == 'weekly' && d?.weeklyTarget != null;
+    final selectedSessions = todaySessions ??
+        (counted(details) && todayValue > 0
+            ? todayValue
+            : (doneToday == true ? 1 : 0));
+    final completed = frequency
+        ? selectedSessions > 0
+        : switch (d?.method) {
+            'numeric' => selectedValue >= d!.target,
+            'checklist' =>
+              d!.steps.every((s) => todayCompletedStepIds.contains(s.id)),
+            _ => doneToday,
+          };
     return BackendGoal(
       id: saved.id,
       title: saved.title,
@@ -5982,6 +5997,7 @@ class BackendGoal {
       lastLoggedOn: lastLoggedOn,
       doneToday: completed,
       todayValue: selectedValue,
+      todaySessions: selectedSessions,
       todayCompletedStepIds: todayCompletedStepIds,
       streakDays: streakDays,
       isDue: d?.isDueOn(on) ?? true,
@@ -5989,15 +6005,25 @@ class BackendGoal {
     );
   }
 
-  BackendGoal withProgress(BackendHabitLog log) {
+  BackendGoal withProgress(BackendHabitLog log,
+      {String? selectedDate, String? sessionAction}) {
     final day = DateTime.tryParse(log.loggedOn)?.weekday;
-    final counted = details?.method == 'yes_no' &&
-        details?.recurrence == 'weekly' &&
-        details?.weeklyTarget != null;
-    int sessions(bool done, int value) =>
-        !done ? 0 : (counted && value > 0 ? value : 1);
-    final delta =
-        sessions(log.done, log.value) - sessions(doneToday == true, todayValue);
+    final counted =
+        details?.recurrence == 'weekly' && details?.weeklyTarget != null;
+    int sessions(bool done, int value, int? saved) =>
+        saved ??
+        (!done
+            ? 0
+            : (counted && details?.method == 'yes_no' && value > 0
+                ? value
+                : 1));
+    final sameDate = selectedDate == null || selectedDate == log.loggedOn;
+    final delta = sameDate
+        ? sessions(log.done, log.value, log.sessions) -
+            sessions(doneToday == true, todayValue, todaySessions)
+        : sessionAction == 'undo'
+            ? -1
+            : 0;
     final days = completedWeekdays.toSet();
     if (day != null && isDue) {
       log.done ? days.add(day) : days.remove(day);
@@ -6015,12 +6041,14 @@ class BackendGoal {
       weeklyProgressAvailable: weeklyProgressAvailable,
       lastLoggedOn: lastLoggedOn,
       details: details,
-      doneToday: log.done,
-      todayValue: log.value,
-      todayCompletedStepIds: log.completedStepIds,
+      doneToday: sameDate ? log.done : doneToday,
+      todayValue: sameDate ? log.value : todayValue,
+      todaySessions: sameDate ? log.sessions : todaySessions,
+      todayCompletedStepIds:
+          sameDate ? log.completedStepIds : todayCompletedStepIds,
       streakDays: streakDays,
       isDue: isDue,
-      failedToday: isDue && !log.done,
+      failedToday: sameDate ? isDue && !log.done : failedToday,
       createdAt: createdAt,
     );
   }
@@ -6034,6 +6062,7 @@ class BackendHabitLog {
     required this.loggedOn,
     required this.done,
     this.value = 0,
+    this.sessions,
     this.completedStepIds = const [],
   });
 
@@ -6044,6 +6073,7 @@ class BackendHabitLog {
       loggedOn: json['logged_on']?.toString() ?? '',
       done: json['done'] == true,
       value: (json['value'] as num?)?.toInt() ?? 0,
+      sessions: (json['sessions'] as num?)?.toInt(),
       completedStepIds: (json['completed_step_ids'] as List? ?? [])
           .whereType<String>()
           .toList(growable: false),
@@ -6055,6 +6085,7 @@ class BackendHabitLog {
   final String loggedOn;
   final bool done;
   final int value;
+  final int? sessions;
   final List<String> completedStepIds;
 }
 

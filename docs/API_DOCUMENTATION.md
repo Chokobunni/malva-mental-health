@@ -1653,6 +1653,17 @@ list of actual qualifying completions in the selected week through `on`.
 weekdays to[] after validation so older schedulers cannot guess daily alarms;
 editing these settings requires the updated app. No additional migration is needed.
 
+Target Frekuensi applies to all logging methods. For a flexible weekly goal,
+`POST /v1/habit-logs` accepts `session_action: complete` or
+`session_action: undo` with an `Idempotency-Key`. Complete increments the
+session tally and clears that day's in-progress value and steps. Undo removes one
+session from the latest credited date in the selected WIB week through the
+selected date. It preserves in-progress value and steps. A response can therefore
+return an earlier `logged_on` for Undo. Use `today_sessions` on goals and
+`sessions` on habit logs for the completion count. Existing `value` and
+`completed_step_ids` remain the value and steps of in-progress work for numeric
+and checklist goals. There is no additional schema migration.
+
 Synchronization correction 2026-11-13: steps on yes/no and numeric are activity
 descriptions only, displayed as bullets without step controls. Legacy edit uses
 the saved weekly quota and does not invent a reminder time. Card weekday counts

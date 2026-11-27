@@ -25,6 +25,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     with WidgetsBindingObserver {
   List<BackendGoal> _serverGoals = const [];
   Set<String> _recordedGoals = {};
+  final Map<String, String> _sessionIntents = {};
   bool _loading = true, _mutating = false, _ownerChanged = false;
   String? _error;
   String _filter = 'all';
@@ -213,34 +214,58 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     }
   }
 
-  BackendGoal _fromLocal(GoalItem g) => BackendGoal(
-      id: g.id,
-      title: g.title,
-      category: 'general',
-      targetPerWeek: 3,
-      isActive: true,
-      details: g.details ??
-          GoalDetails(
-              startDate: _today,
-              note: g.note,
-              time:
-                  '${g.reminder.hour.toString().padLeft(2, '0')}:${g.reminder.minute.toString().padLeft(2, '0')}',
-              recurrence: switch (g.frequency) {
-                'Mingguan' => 'weekly',
-                'Bulanan' => 'monthly',
-                _ => 'daily'
-              }),
-      doneToday: g.completedToday,
-      todayValue: g.value,
-      todayCompletedStepIds: g.completedStepIds,
-      doneThisWeek:
-          g.details?.recurrence == 'weekly' && g.details?.weeklyTarget != null
-              ? (g.details?.method == 'yes_no'
-                  ? (g.value > 0 ? g.value : (g.completedToday ? 1 : 0))
-                  : (g.completedToday ? 1 : 0))
-              : 0,
-      isDue: g.details?.isDueOn(DateTime.parse(_selectedDate)) ?? true,
-      streakDays: g.streakDays);
+  BackendGoal _fromLocal(GoalItem g) {
+    final frequency =
+        g.details?.recurrence == 'weekly' && g.details?.weeklyTarget != null;
+    final selected = parseWibStored(_selectedDate)!;
+    final monday =
+        wibDateKey(selected.subtract(Duration(days: selected.weekday - 1)));
+    final legacySessions = g.details?.method == 'yes_no' && g.value > 0
+        ? g.value
+        : (g.completedToday ? 1 : 0);
+    final progressDate = g.progressOn ?? _today;
+    final sessions = g.sessionCounts.isEmpty
+        ? (progressDate.compareTo(monday) >= 0 &&
+                progressDate.compareTo(_selectedDate) <= 0
+            ? legacySessions
+            : 0)
+        : g.sessionCounts.entries
+            .where((entry) =>
+                entry.key.compareTo(monday) >= 0 &&
+                entry.key.compareTo(_selectedDate) <= 0)
+            .fold<int>(0, (count, entry) => count + entry.value);
+    final selectedProgress = progressDate == _selectedDate;
+    final todaySessions = g.sessionCounts[_selectedDate] ??
+        (g.sessionCounts.isEmpty && selectedProgress && g.completedToday
+            ? legacySessions
+            : 0);
+    return BackendGoal(
+        id: g.id,
+        title: g.title,
+        category: 'general',
+        targetPerWeek: 3,
+        isActive: true,
+        details: g.details ??
+            GoalDetails(
+                startDate: _today,
+                note: g.note,
+                time:
+                    '${g.reminder.hour.toString().padLeft(2, '0')}:${g.reminder.minute.toString().padLeft(2, '0')}',
+                recurrence: switch (g.frequency) {
+                  'Mingguan' => 'weekly',
+                  'Bulanan' => 'monthly',
+                  _ => 'daily'
+                }),
+        doneToday: frequency
+            ? todaySessions > 0
+            : selectedProgress && g.completedToday,
+        todayValue: selectedProgress ? g.value : 0,
+        todayCompletedStepIds: selectedProgress ? g.completedStepIds : const [],
+        todaySessions: frequency ? todaySessions : null,
+        doneThisWeek: frequency ? sessions : 0,
+        isDue: g.details?.isDueOn(DateTime.parse(_selectedDate)) ?? true,
+        streakDays: g.streakDays);
+  }
 
   bool _done(BackendGoal goal) =>
       goal.doneToday ?? (goal.lastLoggedOn == _selectedDate);
@@ -1121,7 +1146,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                               : null))),
                             ]))),
                 ]))
-          else ...[
+          else if (!_countedWeekly(goal)) ...[
             const Divider(color: Color(0xFFF1EDF5), height: 1),
             const SizedBox(height: 10),
             Row(children: [
@@ -1143,9 +1168,19 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                           fontFamily: 'PlusJakartaSans',
                           fontSize: 11,
                           color: goalPurple))),
-              _yesNo(goal, true, done, locked),
+              _yesNo(goal, true, done, locked || !goal.isDue),
               const SizedBox(width: 6),
               _yesNo(goal, false, done, locked)
+            ]),
+          ],
+          if (_countedWeekly(goal)) ...[
+            const SizedBox(height: 16),
+            const Divider(color: Color(0xFFF1EDF5), height: 1),
+            const SizedBox(height: 14),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              _yesNo(goal, true, done, locked || !goal.isDue),
+              const SizedBox(width: 10),
+              _yesNo(goal, false, done, locked || !goal.isDue),
             ]),
           ],
         ]));
@@ -1250,42 +1285,6 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         details.recurrence == 'weekly' ||
         (details.method == 'yes_no' && details.recurrence == 'daily')) {
       final target = goal.effectiveWeeklyTarget(DateTime.parse(_selectedDate));
-      if (_countedWeekly(goal)) {
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Expanded(
-                child: Text('Sesi minggu ini',
-                    style: TextStyle(
-                        fontFamily: 'PlusJakartaSans',
-                        fontSize: 11.5,
-                        color: goalMuted))),
-            Text(
-                target == 0
-                    ? '${goal.doneThisWeek} sesi'
-                    : '${goal.doneThisWeek}/$target sesi',
-                style: const TextStyle(
-                    fontFamily: 'PlusJakartaSans',
-                    fontSize: 11.5,
-                    color: goalPurple,
-                    fontWeight: FontWeight.w700)),
-          ]),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-              value: target == 0
-                  ? 0
-                  : (goal.doneThisWeek / target).clamp(0.0, 1.0),
-              minHeight: 8,
-              color: goalPurple,
-              backgroundColor: goalTint,
-              borderRadius: BorderRadius.circular(99)),
-          const SizedBox(height: 6),
-          Text('${_sessionsToday(goal)} sesi pada tanggal ini',
-              style: const TextStyle(
-                  fontFamily: 'PlusJakartaSans',
-                  fontSize: 11,
-                  color: goalMuted)),
-        ]);
-      }
       return Column(children: [
         Row(children: [
           const Expanded(
@@ -1296,8 +1295,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                       color: goalMuted))),
           Text(
               target == 0
-                  ? '${goal.doneThisWeek} kali'
-                  : '${goal.doneThisWeek}/$target kali',
+                  ? '${goal.doneThisWeek} ${_countedWeekly(goal) ? 'sesi' : 'kali'}'
+                  : '${goal.doneThisWeek}/$target ${_countedWeekly(goal) ? 'sesi' : 'kali'}',
               style: const TextStyle(
                   fontFamily: 'PlusJakartaSans',
                   fontSize: 11.5,
@@ -1305,21 +1304,30 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                   fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 8),
-        Row(children: [
-          for (var i = 0; i < 7; i++) ...[
-            if (i > 0) const SizedBox(width: 6),
-            Expanded(
-                child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(99),
-                        color: i < goal.doneThisWeek
-                            ? goalPurple
-                            : i < target
-                                ? const Color(0xFFE8D5F6)
-                                : const Color(0xFFF1F4F7)))),
-          ]
-        ]),
+        if (_countedWeekly(goal) && target > 7)
+          LinearProgressIndicator(
+            value: (goal.doneThisWeek / target).clamp(0, 1),
+            minHeight: 8,
+            color: goalPurple,
+            backgroundColor: goalTint,
+            borderRadius: BorderRadius.circular(99),
+          )
+        else
+          Row(children: [
+            for (var i = 0; i < 7; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              Expanded(
+                  child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(99),
+                          color: i < goal.doneThisWeek
+                              ? goalPurple
+                              : i < target
+                                  ? const Color(0xFFE8D5F6)
+                                  : const Color(0xFFF1F4F7)))),
+            ]
+          ]),
       ]);
     }
     return Text(details.scheduleLabel,
@@ -1331,34 +1339,43 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   }
 
   bool _countedWeekly(BackendGoal goal) =>
-      goal.details?.method == 'yes_no' &&
       goal.details?.recurrence == 'weekly' &&
       goal.details?.weeklyTarget != null;
   int _sessionsToday(BackendGoal goal) =>
-      goal.todayValue > 0 ? goal.todayValue : (_done(goal) ? 1 : 0);
+      goal.todaySessions ??
+      (goal.details?.method == 'yes_no' && goal.todayValue > 0
+          ? goal.todayValue
+          : (_done(goal) ? 1 : 0));
 
   Widget _yesNo(BackendGoal goal, bool yes, bool done, bool locked) => SizedBox(
-      height: 32,
+      height: _countedWeekly(goal) ? 42 : 32,
       child: FilledButton.icon(
-          onPressed: locked ||
-                  (_countedWeekly(goal) && !yes && _sessionsToday(goal) == 0)
-              ? null
-              : () => _countedWeekly(goal)
-                  ? _log(goal,
-                      value: (_sessionsToday(goal) + (yes ? 1 : -1))
-                          .clamp(0, 1000000))
-                  : _log(goal, done: yes),
+          onPressed:
+              locked || (_countedWeekly(goal) && !yes && goal.doneThisWeek == 0)
+                  ? null
+                  : () => _countedWeekly(goal)
+                      ? _log(goal, sessionAction: yes ? 'complete' : 'undo')
+                      : _log(goal, done: yes),
           style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 32),
-              backgroundColor: (yes ? done : goal.failedToday)
-                  ? goalPurple
-                  : const Color(0xFFF0F3F7),
-              foregroundColor: (yes ? done : goal.failedToday)
-                  ? Colors.white
-                  : const Color(0xFF6A7785),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize:
+                  _countedWeekly(goal) ? const Size(90, 42) : const Size(0, 32),
+              backgroundColor:
+                  (_countedWeekly(goal) ? yes : (yes ? done : goal.failedToday))
+                      ? goalPurple
+                      : const Color(0xFFF0F3F7),
+              foregroundColor:
+                  (_countedWeekly(goal) ? yes : (yes ? done : goal.failedToday))
+                      ? Colors.white
+                      : const Color(0xFF6A7785),
+              disabledBackgroundColor:
+                  _countedWeekly(goal) ? const Color(0xFFF0F3F7) : null,
+              disabledForegroundColor:
+                  _countedWeekly(goal) ? const Color(0xFF6A7785) : null,
+              padding: EdgeInsets.symmetric(
+                  horizontal: _countedWeekly(goal) ? 17 : 12),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13)),
+                  borderRadius:
+                      BorderRadius.circular(_countedWeekly(goal) ? 24 : 13)),
               textStyle: const TextStyle(
                   fontFamily: 'PlusJakartaSans',
                   fontSize: 12,
@@ -1394,7 +1411,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           icon: Icon(add ? Icons.add : Icons.remove, size: 16)));
 
   Future<void> _log(BackendGoal goal,
-      {bool? done, int? value, List<String>? steps}) async {
+      {bool? done,
+      int? value,
+      List<String>? steps,
+      String? sessionAction}) async {
     if (!_current || _mutating) return;
     // Logs retain historical IDs after a definition edit. Only current steps
     // may be submitted again, including when a historical-date reload failed.
@@ -1405,27 +1425,40 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
       if (_server) {
         final token = ref.read(currentSessionProvider)!.accessToken!;
         final date = _selectedDate;
+        final intent = '${goal.id}:$date:$sessionAction';
+        final key = sessionAction == null
+            ? null
+            : _sessionIntents.putIfAbsent(intent,
+                () => 'habit_${wibNow().microsecondsSinceEpoch}_${goal.id}');
         final log = await ref.read(apiClientProvider).logHabit(
             accessToken: token,
             goalId: goal.id,
             loggedOn: date,
             done: done ?? false,
             value: value,
-            completedStepIds: steps);
+            completedStepIds: steps,
+            sessionAction: sessionAction,
+            idempotencyKey: key);
         if (_current) {
+          _sessionIntents.remove(intent);
           if (date == _selectedDate) {
             setState(() {
               _recordedGoals.add(goal.id);
               _serverGoals = [
                 for (final g in _serverGoals)
-                  g.id == goal.id ? g.withProgress(log) : g
+                  g.id == goal.id
+                      ? g.withProgress(log,
+                          selectedDate: date, sessionAction: sessionAction)
+                      : g
               ];
             });
           }
           if (date == _today) {
             ref.read(acceptedGoalMutationProvider.notifier).state =
                 GoalReminderMutation.upsert(
-                    ref.read(currentSessionProvider)!, goal.withProgress(log));
+                    ref.read(currentSessionProvider)!,
+                    goal.withProgress(log,
+                        selectedDate: date, sessionAction: sessionAction));
           }
           ref.read(clinicalDataRevisionProvider.notifier).state++;
           await _load();
@@ -1435,19 +1468,54 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             .read(malvaStoreProvider)
             .goals
             .firstWhere((g) => g.id == goal.id);
-        final nextValue = value ?? local.value;
-        final nextSteps = steps ?? local.completedStepIds;
-        final completed = switch (goal.details?.method) {
-          'numeric' => nextValue >= goal.details!.target,
-          'checklist' =>
-            goal.details!.steps.every((s) => nextSteps.contains(s.id)),
-          _ =>
-            _countedWeekly(goal) && value != null ? value > 0 : done ?? false,
-        };
+        var nextValue = value ?? goal.todayValue;
+        var nextSteps = steps ?? goal.todayCompletedStepIds;
+        final counts = {...local.sessionCounts};
+        if (_countedWeekly(goal)) {
+          if (counts.isEmpty) {
+            final legacyCount =
+                goal.details?.method == 'yes_no' && local.value > 0
+                    ? local.value
+                    : (local.completedToday ? 1 : 0);
+            if (legacyCount > 0)
+              counts[local.progressOn ?? _today] = legacyCount;
+          }
+          counts.putIfAbsent(_selectedDate, () => _sessionsToday(goal));
+          if (sessionAction == 'complete') {
+            counts[_selectedDate] = counts[_selectedDate]! + 1;
+            nextValue = 0;
+            nextSteps = [];
+          } else if (sessionAction == 'undo') {
+            final selected = parseWibStored(_selectedDate)!;
+            final monday = wibDateKey(
+                selected.subtract(Duration(days: selected.weekday - 1)));
+            final dates = counts.keys
+                .where((date) =>
+                    date.compareTo(monday) >= 0 &&
+                    date.compareTo(_selectedDate) <= 0 &&
+                    counts[date]! > 0)
+                .toList()
+              ..sort();
+            if (dates.isEmpty) return;
+            counts[dates.last] = counts[dates.last]! - 1;
+          }
+        }
+        final completed = _countedWeekly(goal)
+            ? (counts[_selectedDate] ?? 0) > 0
+            : switch (goal.details?.method) {
+                'numeric' => nextValue >= goal.details!.target,
+                'checklist' =>
+                  goal.details!.steps.every((s) => nextSteps.contains(s.id)),
+                _ => _countedWeekly(goal) && value != null
+                    ? value > 0
+                    : done ?? false,
+              };
         ref.read(malvaStoreProvider.notifier).upsertGoal(local.copyWith(
             completedToday: completed,
             value: nextValue,
-            completedStepIds: nextSteps));
+            completedStepIds: nextSteps,
+            sessionCounts: counts,
+            progressOn: _selectedDate));
       }
     } on Object catch (e) {
       if (_current) _showError(e);
