@@ -1522,15 +1522,21 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('Durasi per slot',
-                                      style: TextStyle(
-                                          color: ink,
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w900)),
-                                  Text('Min. 60 menit',
-                                      style: TextStyle(
-                                          color: accent,
-                                          fontWeight: FontWeight.w700)),
+                                  Flexible(
+                                    child: Text('Durasi per slot',
+                                        style: TextStyle(
+                                            color: ink,
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w900)),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text('Min. 60 menit',
+                                        textAlign: TextAlign.end,
+                                        style: TextStyle(
+                                            color: accent,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -1726,6 +1732,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       showTimePicker(
         context: context,
         initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+        orientation: Orientation.portrait,
         helpText: 'Jam $label',
         cancelText: 'Batal',
         confirmText: 'Atur',

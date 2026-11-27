@@ -23,6 +23,9 @@ void main() {
   testWidgets(
       'editing a categorized slot preserves inactive state and other slots',
       (tester) async {
+    tester.view.physicalSize = const Size(390, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final api = _AvailabilityApi();
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
@@ -48,7 +51,8 @@ void main() {
     await tester.tap(find.text('Mulai'));
     await tester.pumpAndSettle();
     expect(find.byType(TimePickerDialog), findsOneWidget);
-    await tester.tap(find.text('Batal').last);
+    expect(find.text('Atur').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Atur'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Custom'));
     await tester.pumpAndSettle();
