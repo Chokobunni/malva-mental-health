@@ -118,7 +118,7 @@ const goalSchemas = `    GoalDetails:
         weekly_target:
           type: integer
           minimum: 0
-          maximum: 7
+          maximum: 1000
           description: Opsional, hanya weekly. Jika hadir, goal fleksibel pada setiap hari minggu aktif; 0 tanpa kuota. Jika absen gunakan weekdays. Tidak mengubah target_per_week legacy.
         weekdays:
           type: array
@@ -192,6 +192,7 @@ const goalSchemas = `    GoalDetails:
           type: integer
           minimum: 0
           maximum: 1000000
+          description: Nilai numeric atau jumlah sesi harian yes/no weekly fleksibel; API selalu nonnegatif. Jika absen, yes/no tetap idempoten.
         completed_step_ids:
           type: array
           maxItems: 100
@@ -218,6 +219,7 @@ const goalSchemas = `    GoalDetails:
               format: date-time
             done_this_week:
               type: integer
+              description: Sesi aktual minggu pilihan sampai on untuk yes/no weekly fleksibel; metode lain tetap menghitung tanggal selesai.
             completed_weekdays:
               type: array
               uniqueItems: true
@@ -234,7 +236,7 @@ const goalSchemas = `    GoalDetails:
               description: Penyelesaian pada tanggal on yang dipilih, memakai target/langkah goal saat ini.
             today_value:
               type: integer
-              description: Progress tanggal on; nol bila belum dicatat.
+              description: Nilai numeric atau jumlah sesi yes/no weekly fleksibel tanggal on; nol bila belum dicatat.
             today_completed_step_ids:
               type: array
               items:

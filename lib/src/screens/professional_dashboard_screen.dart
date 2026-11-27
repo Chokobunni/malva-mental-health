@@ -1265,8 +1265,8 @@ class _ProfessionalToolsSectionState
           icon: Icons.work_outline_rounded),
       _PortalDoorCard(
           icon: Icons.account_balance_wallet_rounded,
-          title: 'Earnings',
-          subtitle: 'Pendapatan, fee platform, dan payout',
+          title: 'Pendapatan',
+          subtitle: 'Ringkasan penghasilan dan pencairan dana',
           color: MalvaColors.amber,
           onTap: () =>
               open(EarningsScreen(session: session, apiClient: apiClient))),
@@ -1289,11 +1289,7 @@ class _ProfessionalToolsSectionState
                             child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Row(children: [
-                                  const CircleAvatar(
-                                      backgroundColor: Color(0xFFF5EDFA),
-                                      radius: 22,
-                                      child: Icon(Icons.event_available_rounded,
-                                          color: _dashboardPurple)),
+                                  professionalServiceArtwork('availability'),
                                   const SizedBox(width: 12),
                                   const Expanded(
                                       child: Text('Ketersediaan & harga',

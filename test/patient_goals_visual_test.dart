@@ -241,7 +241,7 @@ void main() {
     await tester.pumpAndSettle();
     await captureRecord(tester, boundary, '01-list.png');
     resetRecordCaptureRendering();
-    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('33%'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.byKey(const Key('goal-filter-numeric')));
     await tester.tap(find.byKey(const Key('goal-filter-numeric')));

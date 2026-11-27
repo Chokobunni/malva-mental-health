@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../providers/providers.dart';
@@ -11,6 +10,10 @@ import '../../../services/meeting_launcher.dart';
 import '../../../theme.dart';
 import '../../../time/wib.dart';
 import '../../../widgets/friendly_error.dart';
+import '../../../widgets/patient_session_actions.dart';
+import '../../../services/server_clock.dart';
+import '../../../screens/booking/doctor_profile_screen.dart';
+import '../../../widgets/session_cancellation_sheet.dart';
 import '../../services/web_care_service.dart';
 import '../../web_format.dart';
 import '../../web_theme.dart';
@@ -79,11 +82,12 @@ class _WebMyCareScreenState extends ConsumerState<WebMyCareScreen> {
 
   List<BackendCareSession> get _upcoming => _sessions
       .where((BackendCareSession s) =>
-          s.isScheduled && (s.scheduledDateTime?.isAfter(wibNow()) ?? false))
+          s.isScheduled &&
+          (s.scheduledDateTime?.isAfter(ServerClock.now()) ?? false))
       .toList(growable: false)
     ..sort((BackendCareSession a, BackendCareSession b) =>
-        (a.scheduledDateTime ?? wibNow())
-            .compareTo(b.scheduledDateTime ?? wibNow()));
+        (a.scheduledDateTime ?? ServerClock.now())
+            .compareTo(b.scheduledDateTime ?? ServerClock.now()));
 
   List<BackendCareSession> get _history => _sessions
       .where((BackendCareSession s) => !s.isScheduled)
@@ -125,13 +129,6 @@ class _WebMyCareScreenState extends ConsumerState<WebMyCareScreen> {
     }
   }
 
-  Future<void> _copyMeetLink(BackendCareSession session) async {
-    if (session.meetingUrl.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: session.meetingUrl));
-    if (!mounted) return;
-    _showMessage('Tautan video disalin.');
-  }
-
   void _openChat(BackendCareSession session) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -145,16 +142,8 @@ class _WebMyCareScreenState extends ConsumerState<WebMyCareScreen> {
   }
 
   Future<void> _cancelSession(BackendCareSession session) async {
-    final reason = await showWebReasonDialog(
-      context,
-      title: 'Batalkan sesi',
-      message: 'Sesi dengan ${session.professionalName} pada '
-          '${formatWibDateTimeOrDash(session.scheduledDateTime)} WIB akan '
-          'dibatalkan. Pembatalan kurang dari 24 jam dapat dikenakan aturan '
-          'server.',
-      confirmLabel: 'Batalkan sesi',
-      destructive: true,
-    );
+    final reason =
+        await showSessionCancellationSheet(context, session: session);
     if (reason == null || !mounted) return;
     try {
       await ref.read(apiClientProvider).updateCareSession(
@@ -420,8 +409,14 @@ class _WebMyCareScreenState extends ConsumerState<WebMyCareScreen> {
                 session: session,
                 busy: _busySessions.contains(session.id),
                 onJoin: () => unawaited(_joinSession(session)),
-                onCopyLink: () => unawaited(_copyMeetLink(session)),
                 onChat: () => _openChat(session),
+                onProfile: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                        builder: (_) => DoctorProfileScreen(
+                            doctorUserId: session.professionalId,
+                            doctorName: session.professionalName,
+                            apiClient: ref.read(apiClientProvider),
+                            session: ref.read(authStateProvider).session))),
                 onReschedule: () => unawaited(_rescheduleSession(session)),
                 onCancel: () => unawaited(_cancelSession(session)),
               ))
@@ -436,7 +431,7 @@ class _WebSessionCard extends StatelessWidget {
     required this.session,
     required this.busy,
     required this.onJoin,
-    required this.onCopyLink,
+    required this.onProfile,
     required this.onChat,
     required this.onReschedule,
     required this.onCancel,
@@ -445,7 +440,7 @@ class _WebSessionCard extends StatelessWidget {
   final BackendCareSession session;
   final bool busy;
   final VoidCallback onJoin;
-  final VoidCallback onCopyLink;
+  final VoidCallback onProfile;
   final VoidCallback onChat;
   final VoidCallback onReschedule;
   final VoidCallback onCancel;
@@ -495,43 +490,36 @@ class _WebSessionCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <Widget>[
-              if (isVideo)
-                FilledButton.icon(
-                  key: Key('web-session-join-${session.id}'),
-                  onPressed: busy ? null : onJoin,
-                  icon: const Icon(Icons.videocam_rounded, size: 17),
-                  label: const Text('Gabung'),
-                ),
-              if (isVideo && session.meetingUrl.isNotEmpty)
-                OutlinedButton.icon(
-                  onPressed: onCopyLink,
-                  icon: const Icon(Icons.link_rounded, size: 17),
-                  label: const Text('Salin tautan'),
-                ),
-              OutlinedButton.icon(
-                key: Key('web-session-chat-${session.id}'),
-                onPressed: onChat,
-                icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17),
-                label: const Text('Chat'),
-              ),
-              if (session.isScheduled) ...<Widget>[
-                TextButton(
-                  key: Key('web-session-reschedule-${session.id}'),
-                  onPressed: onReschedule,
-                  child: const Text('Pindahkan'),
-                ),
-                TextButton(
-                  key: Key('web-session-cancel-${session.id}'),
-                  onPressed: onCancel,
-                  child: const Text('Batalkan'),
-                ),
-              ],
-            ],
-          ),
+          if (isVideo)
+            FilledButton.icon(
+                key: Key('web-session-join-${session.id}'),
+                onPressed: busy ||
+                        !session.canJoinNow ||
+                        session.meetingUrl.trim().isEmpty
+                    ? null
+                    : onJoin,
+                icon: const Icon(Icons.videocam_rounded, size: 17),
+                label: const Text('Gabung')),
+          OutlinedButton.icon(
+              key: Key('web-session-chat-${session.id}'),
+              onPressed: onChat,
+              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17),
+              label: const Text('Chat')),
+          if (session.isScheduled) ...[
+            const SizedBox(height: 12),
+            PatientSessionActions(
+                session: session,
+                onProfile: onProfile,
+                onReschedule: scheduled != null &&
+                        scheduled.difference(ServerClock.now()) >=
+                            const Duration(hours: 1)
+                    ? onReschedule
+                    : null,
+                onCancel:
+                    scheduled != null && scheduled.isAfter(ServerClock.now())
+                        ? onCancel
+                        : null),
+          ],
         ],
       ),
     );

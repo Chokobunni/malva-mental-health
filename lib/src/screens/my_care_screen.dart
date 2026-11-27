@@ -12,6 +12,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
+import '../widgets/session_cancellation_sheet.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/care_session_card.dart';
 import '../widgets/session_attendance_actions.dart';
@@ -461,8 +462,11 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                         apiClient: widget.apiClient,
                       ),
                     )),
-                onCancel:
-                    _mayChange(session) ? () => _cancelSession(session) : null,
+                onCancel: session.isScheduled &&
+                        session.scheduledDateTime != null &&
+                        session.scheduledDateTime!.isAfter(ServerClock.now())
+                    ? () => _cancelSession(session)
+                    : null,
                 onReschedule:
                     _mayChange(session) ? () => _reschedule(session) : null,
               ),
@@ -709,7 +713,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     final start = session.scheduledDateTime;
     return session.isScheduled &&
         start != null &&
-        start.difference(ServerClock.now()) >= const Duration(hours: 24);
+        start.difference(ServerClock.now()) >= const Duration(hours: 1);
   }
 
   Future<void> _reschedule(BackendCareSession existing) async {
@@ -735,23 +739,10 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     final api = widget.apiClient ?? ref.read(apiClientProvider);
     if (token == null || token.isEmpty || api == null) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Batalkan sesi?'),
-        content: const Text('Pembatalan minimal 24 jam sebelum sesi.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Kembali')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Batalkan')),
-        ],
-      ),
-    );
+    final reason =
+        await showSessionCancellationSheet(context, session: session);
     if (!mounted ||
-        confirmed != true ||
+        reason == null ||
         token !=
             (widget.session ?? ref.read(currentSessionProvider))?.accessToken)
       return;
@@ -760,6 +751,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         accessToken: token,
         sessionId: session.id,
         status: 'cancelled_by_patient',
+        cancelReason: reason,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context)

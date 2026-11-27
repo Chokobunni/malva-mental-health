@@ -2613,10 +2613,20 @@ func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMes
 	if !hasMetadata {
 		msg.Metadata = nil
 	}
+	sentAt := clock.Now().Truncate(time.Microsecond)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ChatMessage{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	sessionID, attendanceRole, err := lockChatAttendanceSession(ctx, tx, msg, sentAt)
+	if err != nil {
+		return ChatMessage{}, err
+	}
 	var saved ChatMessage
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
 		ON CONFLICT(id) DO UPDATE SET id=chat_messages.id
 		WHERE chat_messages.deleted_at IS NULL
 		 AND chat_messages.patient_id=EXCLUDED.patient_id AND chat_messages.professional_id=EXCLUDED.professional_id
@@ -2626,10 +2636,19 @@ func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMes
 		RETURNING id, patient_id, professional_id, sender_id, sender_name, text, kind,
 		          COALESCE(attachment_meta, '{}'::jsonb), created_at
 	`, msg.ID, msg.PatientID, msg.ProfessionalID, msg.SenderID, msg.SenderName, msg.Text,
-		msg.Kind, metadataOrNull(msg.Metadata)).
+		msg.Kind, metadataOrNull(msg.Metadata), sentAt).
 		Scan(&saved.ID, &saved.PatientID, &saved.ProfessionalID, &saved.SenderID,
 			&saved.SenderName, &saved.Text, &saved.Kind, &saved.Metadata, &saved.CreatedAt)
 	if err != nil {
+		return ChatMessage{}, err
+	}
+	// A retransmission retains the original timestamp and cannot mark attendance for a later session.
+	if sessionID != "" && saved.CreatedAt.Equal(sentAt) {
+		if err := applyChatAttendance(ctx, tx, sessionID, attendanceRole, sentAt); err != nil {
+			return ChatMessage{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return ChatMessage{}, err
 	}
 	if string(saved.Metadata) == "{}" {

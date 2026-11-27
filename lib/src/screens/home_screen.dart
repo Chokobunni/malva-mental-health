@@ -15,9 +15,9 @@ import '../widgets/care_reference_widgets.dart';
 import 'notifications_screen.dart';
 import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
-import '../widgets/malva_components.dart';
 import '../widgets/care_session_card.dart';
 import '../widgets/friendly_error.dart';
+import '../widgets/session_cancellation_sheet.dart';
 
 import '../widgets/sync_status.dart';
 import '../widgets/therapy_library.dart';
@@ -445,7 +445,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       apiClient: _api))),
           onReschedule: session.scheduledDateTime != null &&
                   session.scheduledDateTime!.difference(ServerClock.now()) >=
-                      const Duration(hours: 24)
+                      const Duration(hours: 1)
               ? () async {
                   final token = auth?.accessToken ?? '';
                   if (token.isEmpty) return;
@@ -488,28 +488,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     BuildContext context,
     BackendCareSession session,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Batalkan sesi?'),
-        content: const Text(
-            'Pembatalan minimal 24 jam sebelum sesi. Kurang dari itu sesi hangus.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Kembali'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: compactFilledButtonStyle.copyWith(
-              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
-            ),
-            child: const Text('Batalkan'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
+    final reason =
+        await showSessionCancellationSheet(context, session: session);
+    if (reason == null || !context.mounted) return;
     final apiClient = _api;
     final token = _session?.accessToken;
     if (token == null || token.isEmpty) return;
@@ -518,6 +499,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         accessToken: token,
         sessionId: session.id,
         status: 'cancelled_by_patient',
+        cancelReason: reason,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

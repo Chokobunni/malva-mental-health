@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/care_session_card.dart' show careSessionNoShowLabel;
 import '../widgets/friendly_error.dart';
+import '../widgets/session_cancellation_sheet.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
 import '../widgets/professional_avatar.dart';
@@ -22,7 +23,7 @@ import 'notifications_screen.dart';
 
 // ============================================================
 // CARE PACKAGE — status paket 4 sesi / 6 minggu + daftar sesi.
-// Pasien: jadwalkan sesi dari sisa, reschedule/cancel (>=24 jam),
+// Pasien: jadwalkan sesi dari sisa, reschedule (>=1 jam), cancel sebelum sesi,
 // buka chat sesi. Aturan hangus & refund dijelaskan di kartu.
 // ============================================================
 
@@ -310,7 +311,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                         '• Jika kamu hadir dan profesional tidak hadir, kuota sesi kembali.\n\n'
                         '• Jika kamu tidak hadir, kuota sesi tetap terpakai.\n\n'
                         '• Profesional batal = kredit kembali, bisa dijadwalkan ulang.\n\n'
-                        '• Batal/reschedule olehmu minimal 24 jam sebelum sesi.\n\n'
+                        '• Batal minimal 1 jam sebelum sesi = kredit kembali; kurang dari 1 jam sesi hangus.\n\n• Reschedule minimal 1 jam sebelum sesi.\n\n'
                         '• Chat teks aktif saat sesi berjalan; kiriman data dibahas saat sesi.',
                         style: TextStyle(
                             fontSize: 12,
@@ -584,28 +585,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   }
 
   Future<void> _cancelSession(BackendCareSession s) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Batalkan sesi?'),
-        content: const Text(
-            'Pembatalan minimal 24 jam sebelum sesi. Kurang dari itu sesi hangus.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Kembali'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: compactFilledButtonStyle.copyWith(
-              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
-            ),
-            child: const Text('Batalkan'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    final reason = await showSessionCancellationSheet(context, session: s);
+    if (reason == null) return;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final token =
@@ -616,6 +597,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         accessToken: token,
         sessionId: s.id,
         status: 'cancelled_by_patient',
+        cancelReason: reason,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -438,19 +438,15 @@ void main() {
       ]
     });
     for (final label in [
-      'DAFTAR OBAT AKTIF & RESEP',
-      'Obat tersimpan',
-      'Tablet',
-      '20 mg',
-      '22:00',
-      'Setelah makan'
+      'Obat Aktif',
+      'Obat tersimpan 20 mg',
+      '22:00 • Tablet • Setelah makan'
     ]) {
       expect(find.text(label), findsOneWidget);
     }
-    expect(find.text('11/11/2026'), findsOneWidget);
-    expect(find.text('17:43'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('17:43')).dy,
-        lessThan(tester.getTopLeft(find.text('DAFTAR OBAT AKTIF & RESEP')).dy));
+    expect(find.text('11/11/2026 • 17:43'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('11/11/2026 • 17:43')).dy,
+        greaterThan(tester.getTopLeft(find.text('Obat Aktif')).dy));
     expect(tester.takeException(), isNull);
   });
 
@@ -462,10 +458,11 @@ void main() {
         metadata: {
           'medication': {'name': 'Obat tersimpan'}
         });
-    expect(find.text('09/11/2026'), findsOneWidget);
-    expect(find.text('01:25'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('01:25')).dy,
-        lessThan(tester.getTopLeft(find.text('DAFTAR OBAT AKTIF & RESEP')).dy));
+    expect(find.text('09/11/2026 • 01:25'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('09/11/2026 • 01:25')).dy,
+        greaterThan(tester.getTopLeft(find.text('Obat Aktif')).dy));
+    expect(find.textContaining('Kepatuhan'), findsNothing);
+    expect(find.textContaining('Sisa'), findsNothing);
   });
 
   testWidgets(

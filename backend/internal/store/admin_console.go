@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -351,10 +353,12 @@ func adminRefundKey(paymentID string) string {
 func (s *Store) ListAdminRefundsForPayment(ctx context.Context, paymentID string) ([]AdminRefundItem, error) {
 	out := make([]AdminRefundItem, 0)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, amount, kind, status, reason, created_at
-		FROM care_refunds
-		WHERE idempotency_key = $1
-		ORDER BY created_at DESC`, adminRefundKey(paymentID))
+		SELECT r.id, r.amount, r.kind, r.status, r.reason, r.created_at
+		FROM care_refunds r
+		LEFT JOIN care_sessions cs ON cs.id=r.session_id
+		LEFT JOIN payments p ON p.booking_id=cs.booking_id AND p.id=$2
+		WHERE r.idempotency_key=$1 OR r.idempotency_key=$3 || cs.id::text || ':' || p.id::text
+		ORDER BY r.created_at DESC`, adminRefundKey(paymentID), paymentID, automaticRefundPrefix)
 	if err != nil {
 		if isUndefinedTable(err) {
 			return out, nil
@@ -455,8 +459,29 @@ func (s *Store) AdminRefundPayment(ctx context.Context, paymentID, reason, actor
 	if err != nil {
 		return false, false, err
 	}
+	var autoID, autoStatus string
+	err = tx.QueryRowContext(ctx, `SELECT r.id, r.status FROM care_refunds r
+		JOIN care_sessions cs ON cs.id=r.session_id
+		WHERE cs.booking_id=$1 AND r.idempotency_key=$2 || cs.id::text || ':' || $3::text`, bookingID,
+		automaticRefundPrefix, paymentID).Scan(&autoID, &autoStatus)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, false, err
+	}
+	if autoStatus == "processing" {
+		return false, false, errors.New("refund otomatis masih diproses")
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE payments SET status = 'refunded' WHERE id = $1`, paymentID); err != nil {
 		return false, false, err
+	}
+	if autoID != "" {
+		if _, err := tx.ExecContext(ctx, `UPDATE care_refunds SET status='paid',reason=$2,updated_at=$3 WHERE id=$1`,
+			autoID, strings.TrimSpace(reason), clock.Now()); err != nil {
+			return false, false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return false, false, err
+		}
+		return true, true, nil
 	}
 
 	// Ambil pemilik dari booking; boleh kosong bila booking warisan hilang.

@@ -163,7 +163,7 @@ void main() {
         'is_due': false,
       });
       if (reason == 'locked history' || reason == 'inactive') {
-        await tap(t, find.text('Jumat, 13 November 2026'));
+        await tap(t, find.text('Jumat, 13 Nov 2026'));
         await t.tap(find.text('11'));
         await t.tap(find.text('OK'));
         await t.pumpAndSettle();
@@ -670,7 +670,7 @@ void main() {
               home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
       await t.pumpAndSettle();
       if (historical) {
-        await tap(t, find.text('Jumat, 13 November 2026'));
+        await tap(t, find.text('Jumat, 13 Nov 2026'));
         await t.tap(find.text('12'));
         await t.tap(find.text('OK'));
         await t.pumpAndSettle();
@@ -757,7 +757,7 @@ void main() {
               home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
       await t.pumpAndSettle();
       if (change == 'date') {
-        await tap(t, find.text('Jumat, 13 November 2026'));
+        await tap(t, find.text('Jumat, 13 Nov 2026'));
         await t.tap(find.text('12'));
         await t.tap(find.text('OK'));
         await t.pumpAndSettle();
@@ -777,7 +777,7 @@ void main() {
       await t.pumpAndSettle();
       if (change == 'date') {
         expect(t.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
-        expect(find.text('Kamis, 12 November 2026'), findsOneWidget);
+        expect(find.text('Kamis, 12 Nov 2026'), findsOneWidget);
       } else {
         expect(find.byType(Checkbox), findsNothing);
         expect(find.text('Sesi akun telah berubah. Buka kembali Target.'),

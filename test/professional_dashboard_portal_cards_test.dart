@@ -203,7 +203,7 @@ void main() {
     expect(find.text('Data pasien dibagikan'), findsNothing);
     expect(find.text('Riwayat Insiden Krisis'), findsNothing);
     expect(find.text('Ketersediaan & harga'), findsOneWidget);
-    expect(find.text('Earnings'), findsOneWidget);
+    expect(find.text('Pendapatan'), findsOneWidget);
     await tester.tap(find.descendant(
         of: find.byType(NavigationBar), matching: find.text('Pasien')));
     await tester.pumpAndSettle();
@@ -212,7 +212,7 @@ void main() {
         (w) => w is NavigationDestination && w.label == 'Lainnya'));
     await tester.pumpAndSettle();
     expect(find.text('Operasional'), findsNothing);
-    expect(find.text('Earnings'), findsNothing);
+    expect(find.text('Pendapatan'), findsNothing);
     expect(find.text('Klinis & kepatuhan'), findsNothing);
     expect(find.text('Verifikasi STR/SIP'), findsOneWidget);
     expect(tester.takeException(), isNull);

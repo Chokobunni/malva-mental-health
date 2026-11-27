@@ -233,6 +233,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
       doneToday: g.completedToday,
       todayValue: g.value,
       todayCompletedStepIds: g.completedStepIds,
+      doneThisWeek:
+          g.details?.recurrence == 'weekly' && g.details?.weeklyTarget != null
+              ? (g.details?.method == 'yes_no'
+                  ? (g.value > 0 ? g.value : (g.completedToday ? 1 : 0))
+                  : (g.completedToday ? 1 : 0))
+              : 0,
+      isDue: g.details?.isDueOn(DateTime.parse(_selectedDate)) ?? true,
       streakDays: g.streakDays);
 
   bool _done(BackendGoal goal) =>
@@ -253,7 +260,20 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     if (widget.showArchive) return _archiveScreen(all);
     final goals =
         all.where((g) => g.isActive || _selectedDate != _today).toList();
-    final due = goals.where((g) => g.isActive && g.isDue).toList();
+    final due = goals
+        .where((g) =>
+            g.isActive &&
+            g.isDue &&
+            !(g.details?.recurrence == 'weekly' &&
+                g.details?.weeklyTarget != null))
+        .toList();
+    final weekly = goals
+        .where((g) =>
+            g.isActive &&
+            g.isDue &&
+            g.details?.recurrence == 'weekly' &&
+            g.details?.weeklyTarget != null)
+        .toList();
     final completed = due.where(_done).length;
     final ratio = due.isEmpty ? 0.0 : completed / due.length;
     final streak =
@@ -376,117 +396,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                             onRetry: _refresh,
                                           )
                                         else ...[
-                                          GoalSurface(
-                                              color: const Color(0xFFF3E9FB),
-                                              border: const Color(0xFFE8DAF2),
-                                              child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(children: [
-                                                      Expanded(
-                                                          flex: 62,
-                                                          child: InkWell(
-                                                              onTap: _mutating
-                                                                  ? null
-                                                                  : _selectDate,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          99),
-                                                              child: GoalPill(
-                                                                  '${const [
-                                                                    'Senin',
-                                                                    'Selasa',
-                                                                    'Rabu',
-                                                                    'Kamis',
-                                                                    'Jumat',
-                                                                    'Sabtu',
-                                                                    'Minggu'
-                                                                  ][DateTime.parse(_selectedDate).weekday - 1]}, ${goalDateLabel(_selectedDate)}',
-                                                                  icon: Icons
-                                                                      .calendar_today_outlined,
-                                                                  background:
-                                                                      Colors
-                                                                          .white,
-                                                                  fontSize: 12,
-                                                                  verticalPadding:
-                                                                      6))),
-                                                      Expanded(
-                                                          flex: 38,
-                                                          child: GoalPill(
-                                                              '$streak Hari Beruntun',
-                                                              icon: Icons
-                                                                  .local_fire_department_rounded,
-                                                              color: const Color(
-                                                                  0xFFC68722),
-                                                              background:
-                                                                  const Color(
-                                                                      0xFFFFF2CC),
-                                                              fontSize: 10.5,
-                                                              verticalPadding:
-                                                                  6)),
-                                                    ]),
-                                                    const SizedBox(height: 20),
-                                                    Row(children: [
-                                                      Expanded(
-                                                          child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
-                                                            const Text(
-                                                                'Capaian Kebiasaanmu',
-                                                                style: TextStyle(
-                                                                    fontFamily:
-                                                                        'PlusJakartaSans',
-                                                                    fontSize:
-                                                                        17,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w700,
-                                                                    color:
-                                                                        goalInk)),
-                                                            const SizedBox(
-                                                                height: 3),
-                                                            Text(
-                                                                '$completed dari ${due.length} target selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}',
-                                                                style: const TextStyle(
-                                                                    fontFamily:
-                                                                        'PlusJakartaSans',
-                                                                    fontSize:
-                                                                        13,
-                                                                    color: Color(
-                                                                        0xFF7F8792))),
-                                                          ])),
-                                                      const SizedBox(width: 8),
-                                                      Text(
-                                                          '${(ratio * 100).round()}%',
-                                                          style: const TextStyle(
-                                                              fontFamily:
-                                                                  'PlusJakartaSans',
-                                                              color: goalPurple,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w800,
-                                                              fontSize: 21))
-                                                    ]),
-                                                    const SizedBox(height: 14),
-                                                    ClipRRect(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(99),
-                                                        child: LinearProgressIndicator(
-                                                            value: ratio,
-                                                            minHeight: 7,
-                                                            backgroundColor:
-                                                                Colors.white,
-                                                            color: goalPurple,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        99))),
-                                                  ])),
+                                          _dailySummary(due.length, completed,
+                                              ratio, streak, weekly),
                                           const SizedBox(height: 20),
                                           SingleChildScrollView(
                                               scrollDirection: Axis.horizontal,
@@ -652,6 +563,142 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                         ],
                                       ])))),
                     ]))));
+  }
+
+  Widget _dailySummary(int due, int completed, double ratio, int streak,
+      List<BackendGoal> weekly) {
+    final sessions = weekly.fold<int>(0, (n, g) => n + g.doneThisWeek);
+    final target =
+        weekly.fold<int>(0, (n, g) => n + (g.details?.weeklyTarget ?? 0));
+    final available = weekly.every((g) => g.weeklyProgressAvailable);
+    final date = DateTime.parse(_selectedDate);
+    final shortDate = '${date.day} ${const [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ][date.month - 1]} ${date.year}';
+    return GoalSurface(
+        radius: 28,
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Wrap(spacing: 10, runSpacing: 8, children: [
+            InkWell(
+                onTap: _mutating ? null : _selectDate,
+                child: GoalPill(
+                    '${const [
+                      'Senin',
+                      'Selasa',
+                      'Rabu',
+                      'Kamis',
+                      'Jumat',
+                      'Sabtu',
+                      'Minggu'
+                    ][DateTime.parse(_selectedDate).weekday - 1]}, $shortDate',
+                    icon: Icons.calendar_today_outlined,
+                    color: goalInk,
+                    background: const Color(0xFFF6F7F9),
+                    fontSize: 11,
+                    verticalPadding: 9)),
+            GoalPill('$streak Hari Beruntun',
+                icon: Icons.local_fire_department_rounded,
+                color: const Color(0xFF87441B),
+                background: const Color(0xFFFFFBE9),
+                fontSize: 11,
+                verticalPadding: 9),
+          ]),
+          const SizedBox(height: 22),
+          Row(children: [
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  const Text('RINGKASAN HARI INI',
+                      style: TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          fontSize: 11,
+                          letterSpacing: 1,
+                          color: goalPurple,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  const Text('Capaian Kebiasaanmu',
+                      style: TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          fontSize: 18,
+                          color: goalInk,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  Text(
+                      '$completed dari $due target selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}',
+                      key: const Key('goal-daily-summary-count'),
+                      style: const TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          fontSize: 12,
+                          color: Color(0xFF7F8792))),
+                ])),
+            const SizedBox(width: 10),
+            GoalSurface(
+                color: goalTint,
+                radius: 18,
+                padding: const EdgeInsets.all(12),
+                child: Column(children: [
+                  Text('${(ratio * 100).round()}%',
+                      key: const Key('goal-daily-summary-percent'),
+                      style: const TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          color: goalPurple,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 23)),
+                  const Text('HARIAN',
+                      style: TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          color: goalPurple,
+                          fontSize: 10)),
+                ])),
+          ]),
+          const SizedBox(height: 20),
+          LinearProgressIndicator(
+              key: const Key('goal-daily-summary-bar'),
+              value: ratio,
+              minHeight: 8,
+              backgroundColor: const Color(0xFFF5F6F8),
+              color: goalPurple,
+              borderRadius: BorderRadius.circular(99)),
+          if (weekly.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            GoalSurface(
+                color: const Color(0xFFFAF4FC),
+                radius: 18,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                child: Row(children: [
+                  const Icon(Icons.circle, size: 9, color: goalPurple),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: Text('${weekly.length} target mingguan berjalan',
+                          style: const TextStyle(
+                              fontFamily: 'PlusJakartaSans',
+                              fontSize: 11,
+                              color: goalInk))),
+                  const SizedBox(width: 6),
+                  Text(available ? '$sessions / $target sesi' : 'Belum termuat',
+                      key: const Key('goal-weekly-summary-count'),
+                      style: const TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          fontSize: 12,
+                          color: goalPurple,
+                          fontWeight: FontWeight.w700)),
+                ])),
+          ],
+        ]));
   }
 
   Widget _tabs() => Container(
@@ -1203,6 +1250,42 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         details.recurrence == 'weekly' ||
         (details.method == 'yes_no' && details.recurrence == 'daily')) {
       final target = goal.effectiveWeeklyTarget(DateTime.parse(_selectedDate));
+      if (_countedWeekly(goal)) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Expanded(
+                child: Text('Sesi minggu ini',
+                    style: TextStyle(
+                        fontFamily: 'PlusJakartaSans',
+                        fontSize: 11.5,
+                        color: goalMuted))),
+            Text(
+                target == 0
+                    ? '${goal.doneThisWeek} sesi'
+                    : '${goal.doneThisWeek}/$target sesi',
+                style: const TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontSize: 11.5,
+                    color: goalPurple,
+                    fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+              value: target == 0
+                  ? 0
+                  : (goal.doneThisWeek / target).clamp(0.0, 1.0),
+              minHeight: 8,
+              color: goalPurple,
+              backgroundColor: goalTint,
+              borderRadius: BorderRadius.circular(99)),
+          const SizedBox(height: 6),
+          Text('${_sessionsToday(goal)} sesi pada tanggal ini',
+              style: const TextStyle(
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 11,
+                  color: goalMuted)),
+        ]);
+      }
       return Column(children: [
         Row(children: [
           const Expanded(
@@ -1247,10 +1330,24 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             height: 1.4));
   }
 
+  bool _countedWeekly(BackendGoal goal) =>
+      goal.details?.method == 'yes_no' &&
+      goal.details?.recurrence == 'weekly' &&
+      goal.details?.weeklyTarget != null;
+  int _sessionsToday(BackendGoal goal) =>
+      goal.todayValue > 0 ? goal.todayValue : (_done(goal) ? 1 : 0);
+
   Widget _yesNo(BackendGoal goal, bool yes, bool done, bool locked) => SizedBox(
       height: 32,
       child: FilledButton.icon(
-          onPressed: locked ? null : () => _log(goal, done: yes),
+          onPressed: locked ||
+                  (_countedWeekly(goal) && !yes && _sessionsToday(goal) == 0)
+              ? null
+              : () => _countedWeekly(goal)
+                  ? _log(goal,
+                      value: (_sessionsToday(goal) + (yes ? 1 : -1))
+                          .clamp(0, 1000000))
+                  : _log(goal, done: yes),
           style: FilledButton.styleFrom(
               minimumSize: const Size(0, 32),
               backgroundColor: (yes ? done : goal.failedToday)
@@ -1267,7 +1364,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                   fontSize: 12,
                   fontWeight: FontWeight.w700)),
           icon: Icon(yes ? Icons.check : Icons.close, size: 14),
-          label: Text(yes ? 'Ya' : 'Tidak')));
+          label: Text(yes
+              ? 'Ya'
+              : _countedWeekly(goal)
+                  ? 'Undo'
+                  : 'Tidak')));
 
   Widget _progressButton(BackendGoal goal, bool add, bool locked) => SizedBox(
       width: 30,
@@ -1340,7 +1441,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           'numeric' => nextValue >= goal.details!.target,
           'checklist' =>
             goal.details!.steps.every((s) => nextSteps.contains(s.id)),
-          _ => done ?? false,
+          _ =>
+            _countedWeekly(goal) && value != null ? value > 0 : done ?? false,
         };
         ref.read(malvaStoreProvider.notifier).upsertGoal(local.copyWith(
             completedToday: completed,

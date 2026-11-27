@@ -207,7 +207,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Batal').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Batalkan'));
+    await tester.ensureVisible(find.text('Ya, Batalkan'));
+    await tester.tap(find.text('Ya, Batalkan'));
     await tester.pumpAndSettle();
     expect(
         fixture.updates, [containsPair('status', 'cancelled_by_professional')]);

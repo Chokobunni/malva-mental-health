@@ -422,7 +422,7 @@ Backend produksi sebelumnya tertinggal dari source APK, sehingga kontrak booking
 FCM memakai payload data-only. Receiver Flutter menerima pesan, sedangkan service Android mencegah SDK merender payload notification legacy secara otomatis. Validator foreground/background memeriksa akun dan scope sesi ongoing menggunakan jam server. Native cleanup hanya menyentuh posted notifications/delegate; alarm goals/obat tetap ditangani scheduler yang sudah ada.
 # Session/clinical chat data flow (2026-11-06)
 
-Session rows serialize attendance and terminal transitions with FOR UPDATE. Additive migration 032 preserves the legacy marker and introduces independent participant attendance. The active query uses scheduled status and an exclusive end. Flutter uses ServerClock, exact expiry timers and bounded permission revalidation. Patient responses omit professional private notes; partial detail updates preserve omitted values.
+Session rows serialize attendance and terminal transitions with FOR UPDATE. The persistent chat entry point serializes message and sender attendance in one transaction. Cancellation records outcome under the same lock; the refund worker dispatches against the original payment with a deterministic provider key. Additive migration 032 preserves the legacy marker and introduces independent participant attendance. The active query uses scheduled status and an exclusive end. Flutter uses ServerClock, exact expiry timers and bounded permission revalidation. Patient responses omit professional private notes; partial detail updates preserve omitted values.
 
 REST and WebSocket share store-level professional card validation. Authenticated private upload validates file bytes, atomically publishes immutable files in UploadDir + '-chat-private', then stores an attachment chat message. Only persisted message participants can read bytes; the directory is never served by the public uploads route. A crash before DB persistence can leave an inaccessible orphan file; retain it during uncertain writes to protect concurrent retries. Include this private directory in protected backups; any future orphan cleanup must cross-check persisted attachment IDs.
 
@@ -551,3 +551,10 @@ master file with `node tools/build_mh_dataset.js <path-to-master_icd_x.json>`.
 Selections use the existing `diagnosis_summary` field as ordered code/title
 lines. The Go store checks the active package or standalone session window,
 professional verification, link, and Health Record consent in the update statement.
+
+
+Flexible weekly yes/no session counts (2026-11-27) reuse the daily habit value
+with an internal negative provenance marker and nonnegative API projections.
+Legacy unmarked done rows remain one session even after numeric method edits.
+The patient daily summary excludes flexible weekly goals; the separate weekly
+strip uses actual sessions. Numeric/checklist completion remains once per date.

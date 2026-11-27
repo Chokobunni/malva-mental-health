@@ -20,6 +20,8 @@ import '../widgets/professional_avatar.dart';
 import '../widgets/account_avatar.dart';
 import '../widgets/therapy_library.dart';
 import '../widgets/shared_record_detail.dart';
+import '../widgets/clinical_profile_cards.dart'
+    show clinicalMedicationAdherence;
 import '../time/wib.dart';
 import '../services/server_clock.dart';
 import '../platform/platform_providers.dart';
@@ -1051,16 +1053,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         );
         return;
       case 'prescription':
-        final meds = await _collectMedications(
+        final medicationSnapshot = await _collectMedications(
           token: token,
           api: api,
           fallback: store,
         );
+        final meds =
+            medicationSnapshot['medications'] as List<Map<String, dynamic>>;
         if (meds.isEmpty) {
           _toast('Belum ada data obat untuk dibagikan.');
           return;
         }
-        metadata = {'medications': meds};
+        metadata = medicationSnapshot;
         text = 'Daftar obat aktif: '
             '${meds.map((m) => '${m['name']} ${m['dosage']}').join(', ')}.';
       case 'goals':
@@ -1565,40 +1569,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       });
 
   /// Daftar obat: server dulu, fallback store lokal.
-  Future<List<Map<String, dynamic>>> _collectMedications({
+  Future<Map<String, dynamic>> _collectMedications({
     required String token,
     required MalvaApiClient api,
     required MalvaStoreState fallback,
   }) async {
     try {
-      final backendMeds = await api.listMedications(accessToken: token);
-      if (backendMeds.isNotEmpty) {
-        return [
-          for (final med in backendMeds)
-            {
-              'name': med.name,
-              'dosage': med.dosage,
-              'form': med.form,
-              'reminder_time': med.reminderTime,
-              'relation_to_meal': med.relationToMeal,
-              'source': med.source,
-            },
-        ];
-      }
+      final medications = await api.listMedications(accessToken: token);
+      int? adherence;
+      try {
+        final logs = await api.listMedicationLogs(accessToken: token, limit: 0);
+        adherence = clinicalMedicationAdherence(medications, logs);
+      } on Object {/* An unavailable history is not zero adherence. */}
+      return {
+        'medications': [
+          for (final med in medications)
+            sharedMedicationSnapshot(med.toMedication(),
+                reminderTime: med.reminderTime,
+                relationToMeal: med.relationToMeal)
+        ],
+        if (adherence != null) 'medication_adherence': adherence,
+      };
     } on Object {
-      // Fallback di bawah.
+      return {
+        'medications': [
+          for (final med in fallback.medications) sharedMedicationSnapshot(med)
+        ]
+      };
     }
-    return [
-      for (final med in fallback.medications)
-        {
-          'name': med.name,
-          'dosage': med.dosage,
-          'form': med.form,
-          'reminder_time':
-              med.reminders.isEmpty ? '' : med.reminders.first.label,
-          'source': med.source,
-        },
-    ];
   }
 
   /// Daftar goals aktif: server dulu, fallback store lokal.
