@@ -548,6 +548,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _scrollController.jumpTo(target);
       }
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _initChat([AuthSession? refreshedSession]) {

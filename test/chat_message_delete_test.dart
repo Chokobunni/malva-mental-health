@@ -125,7 +125,10 @@ void main() {
     expect(find.text('Pesan lebih lama'), findsOneWidget);
     expect(loadOlder, findsNothing);
     await tester.tap(jump);
-    await tester.pumpAndSettle();
+    // Ignore the chat connection indicator's repeating animation.
+    for (var frame = 0; frame < 8; frame++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('Pesan 0'), findsOneWidget);
     expect(jump, findsNothing);
     await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
