@@ -102,8 +102,7 @@ class _SessionAttendanceActionsState
     final ended = start != null &&
         !now.isBefore(start.add(Duration(minutes: session.durationMinutes)));
     if (!session.isScheduled || !opened) return const SizedBox.shrink();
-    if (!professional) {
-      if (ended) return const SizedBox.shrink();
+    if (!ended) {
       if (attendance.isNotEmpty) {
         return Text(
           attendance == 'attended'
@@ -154,31 +153,22 @@ class _SessionAttendanceActionsState
         ),
       ]);
     }
+    if (!professional) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(
-          'Kehadiran saya${attendance.isEmpty ? '' : ': ${attendance == 'attended' ? 'Hadir' : 'Tidak hadir'}'}',
-          style: const TextStyle(fontWeight: FontWeight.w700)),
-      if (session.isScheduled && opened)
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          if (!ended && attendance.isEmpty) ...[
-            OutlinedButton.icon(
-                onPressed: _busy ? null : () => _mark('attended'),
-                icon: const Icon(Icons.check_rounded, size: 16),
-                label: const Text('Hadir')),
-            OutlinedButton.icon(
-                onPressed: _busy ? null : () => _mark('absent'),
-                icon: const Icon(Icons.person_off_rounded, size: 16),
-                label: const Text('Tidak hadir')),
-          ],
-          if (ended &&
-              attendance == 'attended' &&
-              session.patientAttendance == 'attended')
-            FilledButton.icon(
-                style: compactFilledButtonStyle,
-                onPressed: _busy ? null : () => _mark('completed'),
-                icon: const Icon(Icons.task_alt_rounded, size: 16),
-                label: const Text('Selesaikan sesi')),
-        ]),
+      if (attendance.isNotEmpty)
+        Text(
+          attendance == 'attended'
+              ? 'Kehadiran saya: Hadir'
+              : 'Kehadiran saya: Tidak hadir',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      if (attendance == 'attended' && session.patientAttendance == 'attended')
+        FilledButton.icon(
+          style: compactFilledButtonStyle,
+          onPressed: _busy ? null : () => _mark('completed'),
+          icon: const Icon(Icons.task_alt_rounded, size: 16),
+          label: const Text('Selesaikan sesi'),
+        ),
     ]);
   }
 }

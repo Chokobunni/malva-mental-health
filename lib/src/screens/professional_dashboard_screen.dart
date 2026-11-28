@@ -205,6 +205,8 @@ class _ProfessionalDashboardScreenState
                       )
                     : _tabIndex == 1
                         ? ProScheduleScreen(
+                            key: ValueKey(widget.session?.backendUserId ??
+                                widget.session?.identifier),
                             session: widget.session,
                             apiClient: widget.apiClient,
                           )

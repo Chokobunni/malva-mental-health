@@ -253,8 +253,8 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	// Validasi slot: sebelumnya endpoint ini sama sekali tidak memvalidasi,
 	// sehingga sesi paket bisa dijadwalkan di luar jam praktik, pada hari
 	// libur profesional, bahkan di masa lalu — dan tetap memotong kuota paket.
-	// Aturan sama dengan createBooking; lead time 24 jam hanya untuk pasien
-	// agar profesional masih bisa menjadwalkan sesi mendadak (<24 jam).
+	// Aturan sama dengan createBooking; lead time dua jam hanya untuk pasien
+	// agar profesional masih bisa menjadwalkan sesi mendadak (kurang dari dua jam).
 	if isProf {
 		if verr := s.validateSlotFor(r.Context(), pkg.ProfessionalID, "package", at, duration, false); verr != nil {
 			writeError(w, http.StatusBadRequest, verr)
@@ -391,14 +391,28 @@ func (s *Server) careSessionNoteContext(w http.ResponseWriter, r *http.Request, 
 		writeUserError(w, http.StatusForbidden, "Hanya profesional pemilik sesi yang dapat melihat data ini.")
 		return
 	}
+	if !s.requireVerifiedProfessional(w, r, claims) {
+		return
+	}
 	cs, err := s.store.GetCareSession(ctx, r.PathValue("session_id"))
 	if err != nil || cs.ProfessionalID != claims.Subject {
 		writeUserError(w, http.StatusNotFound, "Sesi tidak ditemukan.")
 		return
 	}
-	if !cs.CanWriteNotesAt(clock.Now()) {
+	if _, err := s.authorizePatientAccess(r, claims, cs.PatientID); err != nil {
+		writeUserError(w, http.StatusForbidden, "Pasien tidak terhubung dengan Anda.")
+		return
+	}
+	if !cs.CanManageNoteResourcesAt(clock.Now()) {
 		writeUserError(w, http.StatusForbidden, "Waktu pengisian catatan sesi telah berakhir.")
 		return
+	}
+	if cs.Status == "scheduled" {
+		access, err := s.store.ChatAccessFor(ctx, cs.PatientID, claims.Subject, "professional")
+		if err != nil || !access.InSession || access.SessionID != cs.ID {
+			writeUserError(w, http.StatusForbidden, "Sesi klinis tidak aktif.")
+			return
+		}
 	}
 	consent, err := s.store.GetPatientDataConsent(ctx, cs.PatientID, claims.Subject)
 	if err != nil {
@@ -421,7 +435,7 @@ func (s *Server) careSessionNoteContext(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	if !cs.CanWriteNotesAt(clock.Now()) {
+	if !cs.CanManageNoteResourcesAt(clock.Now()) {
 		writeUserError(w, http.StatusForbidden, "Waktu pengisian catatan sesi telah berakhir.")
 		return
 	}
@@ -560,7 +574,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		reason := strings.TrimSpace(req.CancelReason)
 		updated, refund, message, err := s.store.CancelCareSession(r.Context(), sessionID, claims.Role, claims.Subject, reason)
 		if err != nil {
-			if errors.Is(err, store.ErrCareSessionTerminal) || errors.Is(err, store.ErrCareCancellationStarted) {
+			if errors.Is(err, store.ErrCareSessionTerminal) || errors.Is(err, store.ErrCareCancellationEnded) {
 				writeUserError(w, http.StatusBadRequest, err.Error())
 			} else {
 				s.logger.Error("gagal menyimpan pembatalan sesi", "error", err)
@@ -650,7 +664,7 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	// Validasi slot tujuan: jam praktik, hari libur, dan ketersediaan berlaku
 	// untuk kedua peran (dulu tidak dicek sama sekali, padahal dialog
 	// reschedule profesional sendiri meminta "pilih slot dalam jam praktikmu").
-	// Lead time 24 jam untuk jadwal BARU hanya diterapkan ke pasien.
+	// Lead time dua jam untuk jadwal BARU hanya diterapkan ke pasien.
 	if isProf {
 		if verr := s.validateSlotFor(r.Context(), cs.ProfessionalID, sessionServiceCategory(cs), at, max(60, cs.DurationMinutes), false, sessionID); verr != nil {
 			writeError(w, http.StatusBadRequest, verr)

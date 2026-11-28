@@ -22,9 +22,13 @@ import (
 var errPracticeWindow = errors.New("slot di luar jam praktik profesional")
 var errPracticeDayOff = errors.New("profesional libur pada tanggal tersebut")
 
+func patientBookingStartAllowed(start, now time.Time) bool {
+	return !start.Before(now.Add(2 * time.Hour))
+}
+
 func (s *Server) validateSlotFor(ctx context.Context, professionalID, category string, start time.Time, durationMinutes int, leadTime bool, excludeSessionID ...string) error {
-	if leadTime && start.Sub(clock.Now()) < 24*time.Hour {
-		return errors.New("booking minimal 24 jam sebelum sesi")
+	if leadTime && !patientBookingStartAllowed(start, clock.Now()) {
+		return errors.New("booking minimal 2 jam sebelum sesi")
 	}
 	if start.Before(clock.Now().Add(-time.Minute)) {
 		return errors.New("slot harus di masa depan")

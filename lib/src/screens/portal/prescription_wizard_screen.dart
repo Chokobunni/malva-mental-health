@@ -402,6 +402,12 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                                                   Flexible(
                                                       child: Text(
                                                           switch (_step) {
+                                                            3
+                                                                when widget
+                                                                        .sessionDraft &&
+                                                                    widget.onSaveMedication !=
+                                                                        null =>
+                                                              'Simpan Obat',
                                                             3 when _editing =>
                                                               widget.personal
                                                                   ? 'Simpan perubahan'
@@ -1453,6 +1459,22 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
           alertBelow: _threshold,
           schedule: legacy ? null : schedule);
       if (widget.sessionDraft) {
+        final save = widget.onSaveMedication;
+        if (save != null) {
+          await save(Medication(
+            id: '',
+            name: updated.name,
+            dosage: updated.dosage,
+            form: updated.form,
+            reminders: schedule.reminders(_meal),
+            currentStock: updated.currentStock,
+            alertBelow: updated.alertBelow,
+            source: 'Profesional',
+            schedule: updated.schedule,
+          ));
+          if (mounted && _session != null) Navigator.pop(context, true);
+          return;
+        }
         Navigator.pop(context, updated);
         return;
       }

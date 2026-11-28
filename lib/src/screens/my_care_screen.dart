@@ -462,13 +462,16 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                         apiClient: widget.apiClient,
                       ),
                     )),
-                onCancel: session.isScheduled &&
-                        session.scheduledDateTime != null &&
-                        session.scheduledDateTime!.isAfter(ServerClock.now())
-                    ? () => _cancelSession(session)
+                liveActionsOnly: true,
+                onCancel:
+                    session.isScheduled ? () => _cancelSession(session) : null,
+                onReschedule: session.isScheduled &&
+                        (session.scheduledDateTime
+                                    ?.difference(ServerClock.now()) ??
+                                Duration.zero) >=
+                            const Duration(hours: 1)
+                    ? () => _reschedule(session)
                     : null,
-                onReschedule:
-                    _mayChange(session) ? () => _reschedule(session) : null,
               ),
               if (session.canJoinNow)
                 Padding(
@@ -709,27 +712,19 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     if (mounted) await _load();
   }
 
-  bool _mayChange(BackendCareSession session) {
-    final start = session.scheduledDateTime;
-    return session.isScheduled &&
-        start != null &&
-        start.difference(ServerClock.now()) >= const Duration(hours: 1);
-  }
-
-  Future<void> _reschedule(BackendCareSession existing) async {
+  Future<void> _reschedule(BackendCareSession session) async {
     final token =
         (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
-    if (token == null || token.isEmpty) return;
     final api = widget.apiClient ?? ref.read(apiClientProvider);
-    if (api == null) return;
+    if (token == null || token.isEmpty || api == null) return;
     final changed = await reschedulePatientCareSession(
       context,
       api: api,
       token: token,
-      session: existing,
-      expiresAt: existing.packageId == null
+      session: session,
+      expiresAt: session.packageId == null
           ? null
-          : _packageForProfessional(existing.professionalId)?.expiresDateTime,
+          : _packageForProfessional(session.professionalId)?.expiresDateTime,
     );
     if (mounted && changed) await _load();
   }

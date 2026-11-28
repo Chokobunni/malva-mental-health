@@ -14,6 +14,52 @@ import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
   setUpAll(initializeWib);
+  testWidgets(
+      'Quick Consult reconciles stale counts and shows empty illustration',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = MalvaApiClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((request) async => http.Response(
+          jsonEncode(request.url.path.endsWith('/availability')
+              ? {
+                  'days': [
+                    {'date': '2099-11-25', 'free_slots': 2}
+                  ]
+                }
+              : {
+                  'slots': [
+                    {'time': '09:00', 'available': false}
+                  ]
+                }),
+          200)),
+    );
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+      home: BookingDetailScreen(
+        doctorUserId: 'doctor',
+        doctorName: 'Profesional Uji',
+        serviceType: 'video',
+        expectedPrice: 500000,
+        doctorPhotoUrl: '',
+        apiClient: api,
+      ),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('2 slot'), findsNothing);
+    expect(find.text('Penuh'), findsOneWidget);
+    expect(find.text('Tidak ada slot tersedia'), findsOneWidget);
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName ==
+                'assets/reference/calendar-slots-empty.png'),
+        findsOneWidget);
+    expect(find.text('09:00'), findsNothing);
+  });
+
   testWidgets('switching Quick Consult modality changes price and clears slot',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(393, 900));

@@ -1320,10 +1320,13 @@ class MalvaApiClient {
     String? patientId,
     String? idempotencyKey,
     GoalDetails? details,
+    String? sessionId,
   }) async {
-    final payload = await _send(
+    final payload = await _sendUri(
       'POST',
-      '/v1/goals',
+      baseUri.replace(path: '/v1/goals', queryParameters: {
+        if (sessionId != null) 'session_id': sessionId,
+      }),
       accessToken: accessToken,
       extraHeaders: {
         if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
@@ -1349,10 +1352,14 @@ class MalvaApiClient {
     int? targetPerWeek,
     bool? isActive,
     GoalDetails? details,
+    String? patientId,
+    String? sessionId,
   }) async {
-    final payload = await _send(
+    final payload = await _sendUri(
       'PATCH',
-      '/v1/goals/$goalId',
+      baseUri.replace(path: '/v1/goals/$goalId', queryParameters: {
+        if (sessionId != null) 'session_id': sessionId,
+      }),
       accessToken: accessToken,
       body: {
         if (title != null) 'title': title,
@@ -1360,6 +1367,7 @@ class MalvaApiClient {
         if (targetPerWeek != null) 'target_per_week': targetPerWeek,
         if (isActive != null) 'is_active': isActive,
         if (details != null) 'details': details.toJson(),
+        if (patientId != null) 'patient_id': patientId,
       },
     );
     return BackendGoal.fromJson(
@@ -1718,10 +1726,13 @@ class MalvaApiClient {
     MedicationSchedule? schedule,
     String? patientId,
     String? idempotencyKey,
+    String? sessionId,
   }) async {
-    final payload = await _send(
+    final payload = await _sendUri(
       'POST',
-      '/v1/medications',
+      baseUri.replace(path: '/v1/medications', queryParameters: {
+        if (sessionId != null) 'session_id': sessionId,
+      }),
       accessToken: accessToken,
       extraHeaders: {
         if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
@@ -1763,10 +1774,13 @@ class MalvaApiClient {
     required String source,
     MedicationSchedule? schedule,
     String? patientId,
+    String? sessionId,
   }) async {
-    final payload = await _send(
+    final payload = await _sendUri(
       'PUT',
-      '/v1/medications/$medicationId',
+      baseUri.replace(path: '/v1/medications/$medicationId', queryParameters: {
+        if (sessionId != null) 'session_id': sessionId,
+      }),
       accessToken: accessToken,
       body: {
         'name': name,
@@ -5566,6 +5580,18 @@ class BackendCareSession {
         deadline != null &&
         !now.isBefore(end) &&
         now.isBefore(deadline);
+  }
+
+  bool get canManageNoteResources {
+    final start = scheduledDateTime;
+    final end = _joinClosesAt;
+    final now = ServerClock.now();
+    return canWriteNotes ||
+        (isScheduled &&
+            start != null &&
+            end != null &&
+            !now.isBefore(start) &&
+            now.isBefore(end));
   }
 
   bool get isScheduled => status == 'scheduled';

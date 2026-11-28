@@ -827,6 +827,7 @@ func professionalAge(date string, today time.Time) (int, bool) {
 }
 
 func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	_ = claims
 	userID := r.PathValue("user_id")
 	dateStr := r.URL.Query().Get("date")
@@ -855,7 +856,12 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	// Hari libur profesional: tidak ada slot sama sekali.
-	if off, err := s.store.ListTimeOff(r.Context(), userID, dateStr, dateStr); err == nil && len(off) > 0 {
+	off, err := s.store.ListTimeOff(r.Context(), userID, dateStr, dateStr)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if len(off) > 0 {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"slots": []interface{}{}, "date": dateStr, "off": true,
 		})
@@ -868,7 +874,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 	for _, at := range candidateTimes {
 		slots = append(slots, map[string]interface{}{
 			"time":      at.Format("15:04"),
-			"available": at.After(nowWIB.Add(24 * time.Hour)),
+			"available": patientBookingStartAllowed(at, nowWIB),
 		})
 	}
 	booked, err := s.store.CountBookedSessions(r.Context(), userID, candidateTimes, candidateDurations...)
@@ -887,6 +893,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 // getDoctorAvailability ringkasan 14 hari ke depan: hari praktik, libur,
 // dan jumlah slot bebas (tanpa rincian jam).
 func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	_ = claims
 	userID := r.PathValue("user_id")
 	if userID == "" {
@@ -913,11 +920,14 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 
 	// Satu query untuk hari libur seluruh 14 hari (sebelumnya satu query per hari).
 	offDates := map[string]bool{}
-	if offs, err := s.store.ListTimeOff(r.Context(), userID,
-		startDate.Format("2006-01-02"), endDate.Format("2006-01-02")); err == nil {
-		for _, o := range offs {
-			offDates[o.OffDate] = true
-		}
+	offs, err := s.store.ListTimeOff(r.Context(), userID,
+		startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for _, o := range offs {
+		offDates[o.OffDate] = true
 	}
 
 	// Kumpulkan slot unik untuk pemeriksaan konflik lintas layanan.
@@ -931,7 +941,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 		}
 		times, durations := scheduleSlotStarts(schedules, day, category == "")
 		for j, at := range times {
-			if !at.After(nowWIB) {
+			if !patientBookingStartAllowed(at, nowWIB) {
 				continue
 			}
 			candidates[i] = append(candidates[i], at)
@@ -943,9 +953,10 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 	// Langkah 2 — satu query untuk semua slot terisi. Sebelumnya IsSlotBooked
 	// dipanggil per slot, sehingga satu permintaan ketersediaan bisa menembak
 	// ±224 query ke database dan menjadikan endpoint ini yang paling berat.
-	booked := map[string]bool{}
-	if b, err := s.store.CountBookedSessions(r.Context(), userID, allTimes, allDurations...); err == nil {
-		booked = b
+	booked, err := s.store.CountBookedSessions(r.Context(), userID, allTimes, allDurations...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 
 	// Langkah 3 — susun respons dari hasil dua langkah di atas.

@@ -150,8 +150,7 @@ void main() {
     expect(find.text('3 sesi'), findsOneWidget);
   });
 
-  testWidgets(
-      'future session card explains check-in and offers consultation actions',
+  testWidgets('future session card explains check-in and hides live actions',
       (tester) async {
     final upcoming = _aktif()
       ..['scheduled_at'] =
@@ -167,11 +166,10 @@ void main() {
     expect(find.text('Video call mendatang'), findsOneWidget);
     expect(find.textContaining('Paket'), findsWidgets);
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
-    await tester.ensureVisible(find.text('Aksi lain'));
-    await tester.tap(find.text('Aksi lain'));
-    await tester.pumpAndSettle();
-    expect(find.text('Reschedule'), findsOneWidget);
-    expect(find.text('Batal'), findsOneWidget);
+    expect(find.text('Aksi lain'), findsNothing);
+    expect(find.text('Profil'), findsNothing);
+    expect(find.text('Reschedule'), findsNothing);
+    expect(find.text('Batal'), findsNothing);
     expect(find.text('Kehadiran saya'), findsNothing);
     expect(find.text('Gabung'), findsNothing);
     expect(tester.takeException(), isNull);

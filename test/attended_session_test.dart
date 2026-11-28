@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:malva_mental_health/src/models.dart';
+import 'package:malva_mental_health/src/platform/platform_providers.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/pro_schedule_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
+
+import 'platform/secure_store_test.dart' show InMemorySecureStore;
 
 // ============================================================
 // "HADIR" HANYA MENANDAI KEHADIRAN
@@ -90,8 +93,58 @@ MalvaApiClient _proScheduleApi(List<Map<String, dynamic>> today) {
 void main() {
   setUpAll(initializeWib);
 
+  testWidgets('completed package prompt appears once after reopening Jadwal',
+      (tester) async {
+    final api = _proScheduleApi([
+      {
+        'id': 'completed-package',
+        'patient_id': 'patient',
+        'professional_id': 'user_pro_1',
+        'patient_name': 'Pasien Paket',
+        'package_id': 'package',
+        'session_type': 'video',
+        'scheduled_at': _isoWib(wibNow().subtract(const Duration(hours: 2))),
+        'duration_minutes': 60,
+        'status': 'completed',
+        'patient_attendance': 'attended',
+        'professional_attendance': 'attended',
+      }
+    ]);
+    final storage = InMemorySecureStore();
+    final container = ProviderContainer(overrides: [
+      apiClientProvider.overrideWithValue(api),
+      secureStoreProvider.overrideWithValue(storage),
+    ]);
+    addTearDown(container.dispose);
+    container.read(authStateProvider.notifier).setSession(_proSession);
+
+    Future<void> openSchedule() async {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildMalvaTheme(),
+          home: Scaffold(
+              body: ProScheduleScreen(session: _proSession, apiClient: api)),
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    await openSchedule();
+    final dialog = find.byType(AlertDialog);
+    expect(find.descendant(of: dialog, matching: find.text('Sesi Selesai')),
+        findsOneWidget);
+    expect(find.text('Rekomendasikan sesi lanjutan'), findsNothing);
+    await tester.tap(find.text('Nanti'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await openSchedule();
+    expect(dialog, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
-      'future professional card explains check-in and keeps planning actions',
+      'future professional card explains check-in and hides live actions',
       (tester) async {
     final api = _proScheduleApi([
       {
@@ -122,14 +175,9 @@ void main() {
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Gabung Sesi'), findsNothing);
-    final actions = find.text('Aksi lain');
-    await tester.scrollUntilVisible(actions, 140);
-    await tester.ensureVisible(actions);
-    await tester.pumpAndSettle();
-    await tester.tap(actions);
-    await tester.pumpAndSettle();
-    expect(find.text('Profil'), findsOneWidget);
-    expect(find.text('Reschedule'), findsOneWidget);
+    expect(find.text('Aksi lain'), findsNothing);
+    expect(find.text('Profil'), findsNothing);
+    expect(find.text('Reschedule'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     container.dispose();
   });
@@ -156,7 +204,7 @@ void main() {
 
   testWidgets(
       'kartu sesi attended: satu konfirmasi kehadiran, tanpa "Tidak hadir", '
-      'tetap ada "Gabung Sesi"', (tester) async {
+      'tetap ada "Chat"', (tester) async {
     final now = wibNow();
     final attendedSession = <String, dynamic>{
       'id': 'cs_attended',
@@ -192,7 +240,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.widgetWithText(FilledButton, 'Gabung Sesi'),
+      find.widgetWithText(FilledButton, 'Chat'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
@@ -203,9 +251,8 @@ void main() {
     expect(find.text('Tidak hadir'), findsNothing,
         reason:
             'tombol "Tidak hadir" tidak boleh ditawarkan lagi setelah hadir');
-    expect(find.widgetWithText(FilledButton, 'Gabung Sesi'), findsOneWidget,
-        reason:
-            'sesi tetap berjalan setelah hadir; aksi Gabung Sesi harus ada');
+    expect(find.widgetWithText(FilledButton, 'Chat'), findsOneWidget,
+        reason: 'sesi tetap berjalan setelah hadir; aksi Chat harus ada');
     await tester.pumpWidget(const SizedBox());
   });
 }

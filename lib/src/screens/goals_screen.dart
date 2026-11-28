@@ -11,6 +11,7 @@ import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import 'goals/goal_editor.dart';
 import 'goals/goal_history_panel.dart';
+import 'goals/goal_numeric_progress.dart';
 import 'goals/goal_reference_widgets.dart';
 
 class GoalsScreen extends ConsumerStatefulWidget {
@@ -98,6 +99,19 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     } else {
       setState(() => _loadedHistoryRange = _historyRange);
     }
+  }
+
+  Future<BackendGoal?> _loadGoalForDate(String id, String day) async {
+    if (!_current || !_server) return null;
+    final token = ref.read(currentSessionProvider)!.accessToken!;
+    final goals = await ref
+        .read(apiClientProvider)
+        .listGoals(accessToken: token, includeInactive: true, on: day);
+    if (!_current) return null;
+    for (final goal in goals) {
+      if (goal.id == id) return goal;
+    }
+    return null;
   }
 
   Future<void> _refresh() async {
@@ -400,6 +414,22 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                         if (_history)
                                           GoalHistoryPanel(
                                             goals: all,
+                                            loadGoalForDate: _server
+                                                ? _loadGoalForDate
+                                                : null,
+                                            detailGuard: (child) => Consumer(
+                                                builder: (context, ref, _) {
+                                              ref.watch(currentSessionProvider);
+                                              return _current
+                                                  ? child
+                                                  : const Dialog(
+                                                      child: Padding(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                  24),
+                                                          child: Text(
+                                                              'Sesi akun telah berubah.')));
+                                            }),
                                             logs: _historyLogs,
                                             range: _loadedHistoryRange,
                                             today: parseWibStored(_today)!,
@@ -938,14 +968,20 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                   background: badgeBg,
                   fontSize: 10,
                   verticalPadding: 3),
-              if (configured != null &&
-                  configured.time.isNotEmpty &&
-                  configured.reminders.isNotEmpty)
+              if (inArchive ||
+                  configured != null &&
+                      configured.time.isNotEmpty &&
+                      configured.reminders.isNotEmpty)
                 Tooltip(
-                    message:
-                        'Pengingat aktif • jadwal pukul ${configured.time.replaceAll(':', '.')} WIB',
-                    child: const Icon(Icons.notifications_active_outlined,
-                        color: goalPurple, size: 17)),
+                    message: inArchive
+                        ? 'Pengingat nonaktif pada target diarsipkan'
+                        : 'Pengingat aktif • jadwal pukul ${configured!.time.replaceAll(':', '.')} WIB',
+                    child: Icon(
+                        inArchive
+                            ? Icons.notifications_off_outlined
+                            : Icons.notifications_active_outlined,
+                        color: goalPurple,
+                        size: 17)),
               if (goal.streakDays > 0)
                 GoalPill('${goal.streakDays} hari',
                     icon: Icons.local_fire_department_rounded,
@@ -955,17 +991,18 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                     verticalPadding: 3),
               if (!goal.isActive && !inArchive) const GoalPill('Nonaktif'),
             ])),
-            SizedBox(
-                width: 32,
-                height: 22,
-                child: IconButton(
-                    tooltip: 'Edit goal',
-                    onPressed: (_mutating || _loggingGoals.isNotEmpty)
-                        ? null
-                        : () => _edit(goal),
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.edit_outlined,
-                        size: 17, color: goalMuted))),
+            if (!inArchive)
+              SizedBox(
+                  width: 32,
+                  height: 22,
+                  child: IconButton(
+                      tooltip: 'Edit goal',
+                      onPressed: (_mutating || _loggingGoals.isNotEmpty)
+                          ? null
+                          : () => _edit(goal),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.edit_outlined,
+                          size: 17, color: goalMuted))),
             _goalMenu(goal),
           ]),
           const SizedBox(height: 4),
@@ -1016,8 +1053,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                       ])),
           ],
           const SizedBox(height: 14),
-          _habitSchedule(goal),
-          if (!goal.isDue)
+          _habitSchedule(goal, inArchive: inArchive),
+          if (!inArchive && !goal.isDue)
             Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
@@ -1033,43 +1070,17 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                         fontSize: 12))),
           const SizedBox(height: 12),
           if (method == 'numeric')
-            GoalSurface(
-                color: const Color(0xFFFAF3FD),
-                border: const Color(0xFFF0E7F5),
-                radius: 13,
-                padding: const EdgeInsets.all(12),
-                child: Column(children: [
-                  Row(children: [
-                    Expanded(
-                        child: Text.rich(
-                            TextSpan(children: [
-                              const TextSpan(text: 'Progres: '),
-                              TextSpan(
-                                  text: '${goal.todayValue}',
-                                  style: const TextStyle(
-                                      fontFamily: 'PlusJakartaSans',
-                                      color: goalPurple)),
-                              TextSpan(
-                                  text:
-                                      ' / ${configured!.target} ${configured.unit}')
-                            ]),
-                            style: const TextStyle(
-                                fontFamily: 'PlusJakartaSans',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF424C59)))),
-                    _progressButton(goal, false, locked),
-                    const SizedBox(width: 6),
-                    _progressButton(goal, true, locked)
-                  ]),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                      value: (goal.todayValue / configured.target).clamp(0, 1),
-                      minHeight: 8,
-                      color: goalPurple,
-                      backgroundColor: Colors.white,
-                      borderRadius: BorderRadius.circular(99)),
-                ]))
+            GoalNumericProgress(
+              key: ValueKey('numeric-${goal.id}'),
+              id: goal.id,
+              title: goal.title,
+              value: goal.todayValue,
+              target: configured!.target,
+              unit: configured.unit,
+              locked: locked,
+              readOnly: inArchive,
+              onSave: (value) => _log(goal, value: value),
+            )
           else if (method == 'checklist')
             GoalSurface(
                 color: const Color(0xFFF9F3FC),
@@ -1195,7 +1206,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         ]));
   }
 
-  Widget _habitSchedule(BackendGoal goal) {
+  Widget _habitSchedule(BackendGoal goal, {bool inArchive = false}) {
     if (!goal.weeklyProgressAvailable) {
       return const Text('Riwayat mingguan belum dapat dimuat',
           style: TextStyle(
@@ -1213,17 +1224,18 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                       fontFamily: 'PlusJakartaSans',
                       fontSize: 11.5,
                       color: goalMuted))),
-          Text(
-              _done(goal)
-                  ? 'Selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}'
-                  : goal.isDue
-                      ? 'Jadwal ${_selectedDate == _today ? 'hari ini' : 'tanggal ini'}'
-                      : 'Di luar jadwal',
-              style: TextStyle(
-                  fontFamily: 'PlusJakartaSans',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: _done(goal) ? const Color(0xFF288873) : goalPurple)),
+          if (!inArchive)
+            Text(
+                _done(goal)
+                    ? 'Selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}'
+                    : goal.isDue
+                        ? 'Jadwal ${_selectedDate == _today ? 'hari ini' : 'tanggal ini'}'
+                        : 'Di luar jadwal',
+                style: TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _done(goal) ? const Color(0xFF288873) : goalPurple)),
         ]),
         const SizedBox(height: 8),
         Row(children: [
@@ -1231,8 +1243,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             if (day > 1) const SizedBox(width: 6),
             Expanded(child: Builder(builder: (_) {
               final scheduled = scheduledDays.contains(day);
-              final completed = goal.completedWeekdays.contains(day);
-              final current = selected.weekday == day;
+              final completed =
+                  !inArchive && goal.completedWeekdays.contains(day);
+              final current = !inArchive && selected.weekday == day;
               return Container(
                   constraints: const BoxConstraints(minHeight: 41),
                   padding: const EdgeInsets.symmetric(vertical: 7),
@@ -1395,29 +1408,6 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
               : _countedWeekly(goal)
                   ? 'Undo'
                   : 'Tidak')));
-
-  Widget _progressButton(BackendGoal goal, bool add, bool locked) => SizedBox(
-      width: 30,
-      height: 30,
-      child: IconButton(
-          tooltip: add
-              ? 'Tambah progres ${goal.title}'
-              : 'Kurangi progres ${goal.title}',
-          onPressed: locked ||
-                  (!add && goal.todayValue <= 0) ||
-                  (add && goal.todayValue >= 1000000)
-              ? null
-              : () => _log(goal, value: goal.todayValue + (add ? 1 : -1)),
-          style: IconButton.styleFrom(
-              backgroundColor: add ? goalPurple : Colors.white,
-              foregroundColor: add ? Colors.white : goalPurple,
-              side: add
-                  ? BorderSide.none
-                  : const BorderSide(color: Color(0xFFE5D5EB)),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9)),
-              padding: EdgeInsets.zero),
-          icon: Icon(add ? Icons.add : Icons.remove, size: 16)));
 
   Future<void> _log(BackendGoal goal,
       {bool? done,

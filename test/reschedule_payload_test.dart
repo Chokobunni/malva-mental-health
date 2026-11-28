@@ -111,8 +111,10 @@ void main() {
                           session: professional, apiClient: api)))));
       await tester.pumpAndSettle();
       if (!isPatient) {
-        await tester.scrollUntilVisible(find.text('Aksi lain'), 120);
-        await tester.tap(find.text('Aksi lain').first);
+        final detail = find.text('Lihat Detail Sesi').first;
+        await tester.scrollUntilVisible(detail, 120);
+        expect(find.text('Reschedule'), findsNothing);
+        await tester.tap(detail);
         await tester.pumpAndSettle();
       }
       final reschedule = find.text('Reschedule').first;

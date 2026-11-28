@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/server_clock.dart';
@@ -11,6 +12,7 @@ import '../theme.dart';
 import '../screens/professional_session_notes_screen.dart';
 import '../screens/booking/booking_owner.dart';
 import '../screens/chat_screen.dart';
+import '../screens/chat/session_follow_up_card.dart';
 import 'meet_join_button.dart';
 import 'patient_session_actions.dart';
 import 'session_attendance_actions.dart';
@@ -49,7 +51,8 @@ class CareSessionCard extends ConsumerWidget {
       this.onConfirmAttendance,
       this.subtitle,
       this.detailLabel = 'Lihat Detail Sesi',
-      this.allowPreSessionChat = false});
+      this.allowPreSessionChat = false,
+      this.liveActionsOnly = false});
   final BackendCareSession session;
   final UserRole role;
   final VoidCallback onOpenChat;
@@ -60,7 +63,7 @@ class CareSessionCard extends ConsumerWidget {
   final Widget? otherActions;
   final String? subtitle;
   final String detailLabel;
-  final bool allowPreSessionChat;
+  final bool allowPreSessionChat, liveActionsOnly;
   final Future<BackendCareSession?> Function()? onConfirmAttendance;
 
   @override
@@ -268,7 +271,7 @@ class _SessionPresentationState extends State<_SessionPresentation> {
       Wrap(spacing: 7, runSpacing: 7, children: [
         chip(s.isVideo ? 'Video' : 'Chat',
             s.isVideo ? Icons.videocam_outlined : Icons.chat_bubble_outline),
-        chip('${s.durationMinutes} mnt', Icons.hourglass_bottom),
+        chip('${s.durationMinutes} mnt', Icons.hourglass_empty),
         chip(
             live
                 ? 'Sisa $countdown'
@@ -293,9 +296,17 @@ class _SessionPresentationState extends State<_SessionPresentation> {
             child: s.isVideo
                 ? MeetJoinButton(
                     session: s,
-                    joinLabel: professional || c.onConfirmAttendance != null
-                        ? null
-                        : 'Gabung Sesi',
+                    joinLabel: c.liveActionsOnly ||
+                            (!professional && c.onConfirmAttendance == null)
+                        ? 'Gabung Sesi'
+                        : null,
+                    joinStyle: c.liveActionsOnly
+                        ? FilledButton.styleFrom(
+                            backgroundColor: const Color(0xff21ad84),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 48),
+                            shape: const StadiumBorder())
+                        : null,
                     accessToken: widget.token,
                     canCreateLink: professional,
                     expanded: true,
@@ -306,9 +317,12 @@ class _SessionPresentationState extends State<_SessionPresentation> {
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xff078b69),
                       padding: const EdgeInsets.symmetric(horizontal: 7),
+                      minimumSize: const Size(0, 48),
+                      shape: const StadiumBorder(),
                     ),
-                    icon: const Icon(Icons.chat_rounded, size: 17),
-                    label: const Text('Gabung Sesi'),
+                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                    label: Text(
+                        c.liveActionsOnly && live ? 'Chat' : 'Gabung Sesi'),
                   ),
           ),
           if (s.isVideo) const SizedBox(width: 8),
@@ -356,7 +370,7 @@ class _SessionPresentationState extends State<_SessionPresentation> {
         ]),
       ],
       if (upcoming &&
-          (!live || c.otherActions != null) &&
+          (c.liveActionsOnly ? live : (!live || c.otherActions != null)) &&
           (c.otherActions != null ||
               c.onCancel != null ||
               c.onReschedule != null ||
@@ -370,7 +384,8 @@ class _SessionPresentationState extends State<_SessionPresentation> {
               session: s,
               onProfile: c.onProfile,
               onCancel: c.onCancel,
-              onReschedule: c.onReschedule)
+              onReschedule: c.liveActionsOnly ? null : c.onReschedule,
+              initiallyExpanded: c.liveActionsOnly)
       ],
     ]);
     return Container(
@@ -493,9 +508,14 @@ class _CareSessionDetailScreenState
     _providerOwned = viewer != null;
     _poll = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() {});
-      if (timer.tick % 30 == 0) _refresh();
+      if (timer.tick % 30 == 0) {
+        unawaited(_refresh().then((_) => _offerCompletion()));
+      }
     });
-    Future.microtask(_refresh);
+    Future.microtask(() async {
+      await _refresh();
+      await _offerCompletion();
+    });
   }
 
   @override
@@ -605,8 +625,7 @@ class _CareSessionDetailScreenState
   }
 
   Future<void> _notes() async {
-    if (!_owns || !_professional || !_completed || !_session.canWriteNotes)
-      return;
+    if (!_owns || !_professional || !_session.canManageNoteResources) return;
     if (widget.card.onNotes != null) {
       widget.card.onNotes!();
       return;
@@ -644,6 +663,7 @@ class _CareSessionDetailScreenState
         _revision++;
       });
       await widget.card.onChanged();
+      await _offerCompletion();
     } catch (error) {
       if (mounted && _owns)
         ScaffoldMessenger.of(context)
@@ -651,6 +671,25 @@ class _CareSessionDetailScreenState
     } finally {
       if (mounted) setState(() => _finishing = false);
     }
+  }
+
+  Future<void> _offerCompletion() async {
+    if (!mounted ||
+        !_owns ||
+        !_professional ||
+        _api == null ||
+        ModalRoute.of(context)?.isCurrent != true) return;
+    await showCompletedSessionPrompt(
+      context: context,
+      ref: ref,
+      session: _session,
+      token: _token,
+      api: _api!,
+      isCurrent: () =>
+          mounted && _owns && ModalRoute.of(context)?.isCurrent == true,
+      isOwner: () => mounted && _owns,
+      onNotes: _notes,
+    );
   }
 
   Widget _chip(String text, {bool light = false, Color? color}) => Container(
@@ -816,18 +855,19 @@ class _CareSessionDetailScreenState
   Widget _timer() {
     final at = _session.scheduledDateTime;
     final end = at?.add(Duration(minutes: _session.durationMinutes));
-    final difference = at == null
-        ? Duration.zero
-        : (_live
-            ? end!.difference(ServerClock.now())
-            : at.difference(ServerClock.now()));
-    final seconds = difference.inSeconds.clamp(0, 99999999);
-    final time = _live
+    final now = ServerClock.now();
+    final started = at != null && !now.isBefore(at);
+    final difference =
+        at == null ? Duration.zero : (started ? end! : at).difference(now);
+    final seconds =
+        ((difference.inMilliseconds + 999) ~/ 1000).clamp(0, 99999999);
+    final remainingMinutes = (seconds + 59) ~/ 60;
+    final time = started
         ? '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}'
-        : '${seconds ~/ 3600} jam ${(seconds % 3600) ~/ 60} mnt';
+        : '${remainingMinutes ~/ 60} jam ${remainingMinutes % 60} mnt';
     return _block(
         Column(children: [
-          Text(_live ? 'Sisa Waktu Sesi' : 'Sesi Dimulai Dalam',
+          Text(started ? 'Sisa Waktu Sesi' : 'Sesi Dimulai Dalam',
               style: const TextStyle(
                   color: _ink, fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 10),
@@ -837,7 +877,7 @@ class _CareSessionDetailScreenState
                   color: _purple, fontSize: 34, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
           Text(
-              _live
+              started
                   ? (_professional
                       ? 'Waktu berjalan otomatis'
                       : 'Waktu berjalan otomatis • Status selesai dikendalikan oleh profesional')
@@ -846,6 +886,37 @@ class _CareSessionDetailScreenState
               style: const TextStyle(color: _purple, fontSize: 13))
         ]),
         color: const Color(0xfff2e5fa));
+  }
+
+  Widget _notesCountdown(DateTime deadline) {
+    final seconds =
+        deadline.difference(ServerClock.now()).inSeconds.clamp(0, 86400);
+    final time = [seconds ~/ 3600, seconds ~/ 60 % 60, seconds % 60]
+        .map((part) => part.toString().padLeft(2, '0'))
+        .join(':');
+    return _block(
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _icon(Icons.schedule_rounded),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                _text('Batas Waktu Pengisian Catatan', size: 15),
+                const SizedBox(height: 5),
+                const Text(
+                    'Catatan Sesi dapat diisi selama 24 jam setelah sesi berakhir. Catatan dikunci otomatis setelah batas waktu.'),
+              ])),
+        ]),
+        const Divider(height: 24),
+        Row(children: [
+          const Expanded(child: Text('Sisa waktu')),
+          _chip(time, light: true),
+        ]),
+      ]),
+      color: const Color(0xfff8f1fb),
+    );
   }
 
   List<Widget> _publishedSummary() {
@@ -991,6 +1062,11 @@ class _CareSessionDetailScreenState
       if (_session.status == 'completed' && !_canShowSummary)
         _block(const Text(
             'Sesi telah selesai. Buka Riwayat untuk melihat ringkasannya.')),
+      if (professional &&
+          _completed &&
+          _session.canWriteNotes &&
+          notesDeadline != null)
+        _notesCountdown(notesDeadline),
       if (professional && notesExpired && !notesSaved)
         _block(
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1130,9 +1206,29 @@ class _CareSessionDetailScreenState
             !_session.isVideo && _canChat ? _openChat : null));
       if (professional) {
         actions.add(const SizedBox(height: 8));
+        if (_session.canManageNoteResources) {
+          actions.add(_cta('Tulis Catatan Sesi', Icons.edit_note, _notes,
+              outline: true));
+          actions.add(const SizedBox(height: 8));
+        }
         actions.add(_cta(_finishing ? 'Menyelesaikan…' : 'Tandai Sesi Selesai',
             Icons.task_alt, _canFinish && !_finishing ? _finish : null,
             outline: true));
+      }
+      if (widget.card.liveActionsOnly &&
+          (_session.scheduledDateTime?.isAfter(ServerClock.now()) ?? false)) {
+        if (widget.card.onReschedule != null) {
+          actions.add(const SizedBox(height: 8));
+          actions.add(_cta(
+              'Reschedule', Icons.event_repeat, widget.card.onReschedule,
+              outline: true));
+        }
+        if (widget.card.onCancel != null) {
+          actions.add(const SizedBox(height: 8));
+          actions.add(_cta(
+              'Batalkan Sesi', Icons.cancel_outlined, widget.card.onCancel,
+              outline: true));
+        }
       }
     } else
       actions.add(_cta('Kembali ke Riwayat', Icons.arrow_back,
@@ -1202,5 +1298,250 @@ class _CareSessionDetailScreenState
                     color: Colors.white,
                     border: Border(top: BorderSide(color: Color(0xfff0eaf4)))),
                 child: Column(mainAxisSize: MainAxisSize.min, children: actions))));
+  }
+}
+
+final _claimingCompletionPrompts = <String>{};
+
+Future<bool> showCompletedSessionPrompt({
+  required BuildContext context,
+  required WidgetRef ref,
+  required BackendCareSession session,
+  required String token,
+  required MalvaApiClient api,
+  required bool Function() isCurrent,
+  required bool Function() isOwner,
+  required Future<void> Function() onNotes,
+}) async {
+  if (!session.canWriteNotes ||
+      session.patientAttendance != 'attended' ||
+      session.professionalAttendance != 'attended' ||
+      session.summaryForPatient.trim().isNotEmpty ||
+      session.id.isEmpty ||
+      token.isEmpty ||
+      !isCurrent()) return false;
+  final key =
+      'session_completion_shown_${session.professionalId}_${session.id}';
+  if (!_claimingCompletionPrompts.add(key)) return false;
+  try {
+    final store = ref.read(secureStoreProvider);
+    try {
+      if (await store.read(key) == '1' || !isCurrent()) return false;
+      await store.write(key, '1');
+    } on Object {
+      return false;
+    }
+    if (!context.mounted || !isCurrent()) {
+      try {
+        await store.delete(key);
+      } on Object {
+        // The persisted marker still prevents duplicate notifications.
+      }
+      return false;
+    }
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (_) => Consumer(builder: (dialogContext, dialogRef, _) {
+        dialogRef.watch(currentSessionProvider);
+        if (!isOwner()) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          });
+          return const SizedBox.shrink();
+        }
+        return _CompletedSessionPrompt(
+            session: session, token: token, api: api, isOwner: isOwner);
+      }),
+    );
+    if (open == true && context.mounted && isCurrent()) await onNotes();
+    return true;
+  } finally {
+    _claimingCompletionPrompts.remove(key);
+  }
+}
+
+class _CompletedSessionPrompt extends StatefulWidget {
+  const _CompletedSessionPrompt(
+      {required this.session,
+      required this.token,
+      required this.api,
+      required this.isOwner});
+  final BackendCareSession session;
+  final String token;
+  final MalvaApiClient api;
+  final bool Function() isOwner;
+
+  @override
+  State<_CompletedSessionPrompt> createState() =>
+      _CompletedSessionPromptState();
+}
+
+class _CompletedSessionPromptState extends State<_CompletedSessionPrompt> {
+  final _focus = TextEditingController();
+  int _days = 7;
+  bool _recommend = false, _sending = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openNotes() async {
+    if (_sending || !widget.isOwner() || !widget.session.canWriteNotes) return;
+    if (_recommend && widget.session.packageId == null) {
+      setState(() {
+        _sending = true;
+        _error = null;
+      });
+      try {
+        await widget.api.sendChatMessage(
+          accessToken: widget.token,
+          recipientId: widget.session.patientId,
+          text: 'Rekomendasi Sesi Lanjutan',
+          kind: 'session_follow_up',
+          metadata: {
+            'session_id': widget.session.id,
+            'interval_days': _days,
+            'insight': _focus.text.trim()
+          },
+        );
+      } on Object catch (error) {
+        if (mounted)
+          setState(() {
+            _error = friendlyErrorMessage(error);
+            _sending = false;
+          });
+        return;
+      }
+    }
+    if (mounted && widget.isOwner()) Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final end = session.notesDeadline?.subtract(const Duration(hours: 24));
+    return PopScope(
+      canPop: !_sending,
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        scrollable: true,
+        title: Row(children: [
+          const Expanded(
+              child: Text('Sesi Selesai',
+                  style: TextStyle(fontWeight: FontWeight.w900))),
+          IconButton(
+              tooltip: 'Tutup',
+              onPressed: _sending ? null : () => Navigator.pop(context),
+              icon: const Icon(Icons.close_rounded)),
+        ]),
+        content:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xfff5eafa),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.assignment_outlined,
+                      size: 13, color: MalvaColors.seed),
+                  SizedBox(width: 5),
+                  Text('LAPORAN & CATATAN MEDIS',
+                      style: TextStyle(
+                          color: MalvaColors.seed,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800)),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text('Lengkapi ringkasan klinis untuk pasien Anda'),
+          const SizedBox(height: 12),
+          ListTile(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            tileColor: const Color(0xfff7f0fa),
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xff722592),
+              foregroundColor: Colors.white,
+              child: Text(session.patientName
+                  .trim()
+                  .split(RegExp(r'\s+'))
+                  .where((part) => part.isNotEmpty)
+                  .take(2)
+                  .map((part) => part.characters.first.toUpperCase())
+                  .join()),
+            ),
+            title: Text(
+                session.patientName.isEmpty ? 'Pasien' : session.patientName),
+            subtitle: Text(
+                '${session.packageId == null ? 'Sesi Sekali' : 'Paket'}${end == null ? '' : '\nSelesai ${formatWibDateTime(end)} WIB'}'),
+          ),
+          if (session.packageId == null) ...[
+            const SizedBox(height: 12),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.event_available_outlined,
+                  color: MalvaColors.seed),
+              title: const Text('Rekomendasikan sesi lanjutan',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Kirim pengingat jadwal ke pasien'),
+              value: _recommend,
+              onChanged: _sending
+                  ? null
+                  : (value) => setState(() => _recommend = value),
+            ),
+            if (_recommend) ...[
+              const Text('Pilih jadwal yang tersedia',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Wrap(spacing: 6, children: [
+                for (final entry in sessionFollowUpIntervals.entries)
+                  ChoiceChip(
+                      label: Text(entry.value),
+                      selected: _days == entry.key,
+                      onSelected: _sending
+                          ? null
+                          : (_) => setState(() => _days = entry.key)),
+              ]),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: _focus,
+                  enabled: !_sending,
+                  maxLines: 3,
+                  maxLength: 2000,
+                  decoration: const InputDecoration(
+                      labelText: 'Fokus & Tujuan Pendampingan')),
+            ],
+          ],
+          if (_error != null)
+            Text(_error!, style: const TextStyle(color: MalvaColors.danger)),
+        ]),
+        actions: [
+          SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                  onPressed: _sending ? null : _openNotes,
+                  icon: const Icon(Icons.edit_note),
+                  style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xff722592)),
+                  label: const Text('Isi Catatan Sesi'))),
+          SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                  onPressed: _sending ? null : () => Navigator.pop(context),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                  label: const Text('Nanti'))),
+        ],
+      ),
+    );
   }
 }

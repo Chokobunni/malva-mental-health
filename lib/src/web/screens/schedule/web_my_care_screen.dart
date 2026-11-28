@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../widgets/booking_slots_empty.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../providers/providers.dart';
@@ -628,8 +629,7 @@ class _WebRescheduleDialogState extends ConsumerState<_WebRescheduleDialog> {
               const Text('Memuat slot...',
                   style: TextStyle(fontSize: 12, color: Color(0xFF8B8194)))
             else if (_slots.isEmpty)
-              const Text('Tidak ada slot pada tanggal ini.',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF8B8194)))
+              const BookingSlotsEmpty()
             else
               Wrap(
                 spacing: 8,

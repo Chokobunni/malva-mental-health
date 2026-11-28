@@ -46,7 +46,7 @@ String formatTherapyRecordDate(DateTime? value) {
 //   - Terapi Kognitif (DBT): Grounding 5-4-3-2-1, TIPP & Pernapasan
 //   - Terapi Relaksasi & Regulasi Somatik: Pernapasan Teratur,
 //     Relaksasi Otot Progresif
-//   - Terapi Psikoedukasi Terstruktur
+//   - Lembar Kerja Psikoedukasi
 //
 // Aturan kolom isian:
 //   - Penomoran (1, 2, 3 / A, B, C / 5-4-3-2-1) adalah label TETAP
@@ -699,7 +699,7 @@ const thinkingTrapsWorksheetFields = <TherapyWorksheetField>[
 
 const behavioralActivationModule = TherapyModule(
   id: 'behavioral_activation',
-  title: 'Aktivasi Perilaku / Target',
+  title: 'Aktivasi Perilaku',
   description:
       'Teknik CBT untuk mengatasi malaise: jangan menunggu "punya semangat dulu '
       'baru bergerak", tetapi bergerak dulu (aktivitas kecil bernilai) agar '
@@ -759,7 +759,7 @@ const behavioralActivationWorksheetFields = <TherapyWorksheetField>[
 
 const groundingModule = TherapyModule(
   id: 'grounding',
-  title: 'Grounding 5-4-3-2-1 (DBT)',
+  title: 'Grounding 5-4-3-2-1',
   description:
       'Teknik grounding berbasis panca indera untuk menghentikan spiral '
       'kecemasan dan membawa pikiran kembali ke saat ini: 5 hal yang '
@@ -825,7 +825,7 @@ const groundingWorksheetFields = <TherapyWorksheetField>[
 
 const tippModule = TherapyModule(
   id: 'tipp',
-  title: 'TIPP & Pernapasan Teratur (DBT & Somatik)',
+  title: 'Latihan TIPP',
   description:
       'TIPP = Temperature (air dingin di wajah), Intense exercise (olahraga '
       'singkat), Paced breathing (napas teratur), Paired muscle relaxation '
@@ -992,7 +992,7 @@ const pmrWorksheetFields = <TherapyWorksheetField>[
 
 const psychoeducationModule = TherapyModule(
   id: 'psychoeducation',
-  title: 'Terapi Psikoedukasi Terstruktur',
+  title: 'Lembar Kerja Psikoedukasi',
   description:
       'Psikoedukasi memberi pemahaman terstruktur tentang kondisi kesehatan '
       'jiwa: apa itu depresi/kecemasan, bagaimana siklus gejala bekerja, '
@@ -1077,7 +1077,7 @@ const _therapyModuleLabels = {
   'tipp': 'DBT & REGULASI SOMATIK',
   'breathing': 'RELAKSASI & PERNAPASAN',
   'pmr': 'PROGRESSIVE MUSCLE RELAXATION',
-  'psychoeducation': 'STRUCTURED PSYCHOEDUCATION',
+  'psychoeducation': 'STRUCTURED PSYCHOEDUCATION WORKSHEET',
 };
 
 class TherapyModuleIcon extends StatelessWidget {
