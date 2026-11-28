@@ -174,8 +174,8 @@ func TestGoalStreakCountsOccurrencesAndAllowsPendingToday(t *testing.T) {
 		t.Fatalf("elapsed missing streak=%d want 0", got)
 	}
 	d.AutoFail = false
-	if got := goalStreak(d, logs, goalTestDate("2026-11-10"), goalTestDate("2026-11-10")); got != 3 {
-		t.Fatalf("missing without auto-fail streak=%d want 3", got)
+	if got := goalStreak(d, logs, goalTestDate("2026-11-10"), goalTestDate("2026-11-10")); got != 0 {
+		t.Fatalf("missing without auto-fail streak=%d want 0", got)
 	}
 	logs = append(logs, HabitLog{LoggedOn: "2026-11-09", Done: false}, HabitLog{LoggedOn: "2026-11-11", Done: true})
 	if got := goalStreak(d, logs, goalTestDate("2026-11-11"), goalTestDate("2026-11-11")); got != 1 {
@@ -318,5 +318,52 @@ func TestGoalFlexibleFirstMondayIsPending(t *testing.T) {
 	logs := []HabitLog{{LoggedOn: "2026-11-02", Done: true}}
 	if got := goalStreak(d, logs, goalTestDate("2026-11-02"), goalTestDate("2026-11-02")); got != 1 {
 		t.Fatalf("first Monday streak=%d want1", got)
+	}
+}
+
+func TestGoalStreakCountsCompletedScheduledDatesOnly(t *testing.T) {
+	d := validGoalDetails()
+	d.Method = "checklist"
+	d.Recurrence = "weekly"
+	d.Weekdays = []int{5, 6, 7}
+	d.Steps = []GoalStep{{ID: "a", Label: "A"}, {ID: "b", Label: "B"}}
+	logs := []HabitLog{{LoggedOn: "2026-11-27", Done: true, CompletedStepIDs: []string{"a", "b"}}}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-28"), goalTestDate("2026-11-28")); got != 1 {
+		t.Fatalf("pending today counted as completed: got %d want 1", got)
+	}
+	logs = append(logs, HabitLog{LoggedOn: "2026-11-28", Done: true, CompletedStepIDs: []string{"a"}})
+	if got := goalStreak(d, logs, goalTestDate("2026-11-28"), goalTestDate("2026-11-28")); got != 1 {
+		t.Fatalf("partial checklist today broke the previous streak: got %d want 1", got)
+	}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-28"), goalTestDate("2026-11-29")); got != 0 {
+		t.Fatalf("elapsed partial checklist did not break streak: got %d want 0", got)
+	}
+	// auto_fail controls missed status, not whether elapsed missing dates are consecutive.
+	d.AutoFail = false
+	logs = []HabitLog{{LoggedOn: "2026-11-20", Done: true, CompletedStepIDs: []string{"a", "b"}}, {LoggedOn: "2026-11-27", Done: true, CompletedStepIDs: []string{"a", "b"}}}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-28"), goalTestDate("2026-11-28")); got != 1 {
+		t.Fatalf("missing prior due dates did not break streak: got %d want 1", got)
+	}
+}
+
+func TestGoalStreakNumericPendingTodayAndSelectedHistory(t *testing.T) {
+	d := validGoalDetails()
+	d.Method = "numeric"
+	d.Target = 7
+	d.Recurrence = "weekly"
+	d.Weekdays = []int{5, 6, 7}
+	logs := []HabitLog{
+		{LoggedOn: "2026-11-26", Done: true, Value: 7}, // Not scheduled.
+		{LoggedOn: "2026-11-27", Done: true, Value: 7},
+		{LoggedOn: "2026-11-28", Done: false, Value: 4},
+	}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-28"), goalTestDate("2026-11-28")); got != 1 {
+		t.Fatalf("pending numeric today streak=%d want 1", got)
+	}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-27"), goalTestDate("2026-11-29")); got != 1 {
+		t.Fatalf("historical selected streak=%d want 1", got)
+	}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-28"), goalTestDate("2026-11-29")); got != 0 {
+		t.Fatalf("elapsed numeric incomplete streak=%d want 0", got)
 	}
 }

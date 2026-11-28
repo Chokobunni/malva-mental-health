@@ -134,8 +134,13 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('$i/5 sesi'), findsOneWidget);
         if (method == 'numeric') {
-          expect(find.text('Progres: 0 / 7 halaman', findRichText: true),
-              findsOneWidget);
+          expect(
+              tester
+                  .widget<TextField>(find.byKey(const Key('goal-value-goal')))
+                  .controller!
+                  .text,
+              '0');
+          expect(find.text('/ 7 halaman'), findsOneWidget);
         }
         if (method == 'checklist')
           expect(find.text('0/2 selesai'), findsOneWidget);
@@ -155,8 +160,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('1/5 sesi'), findsOneWidget);
       if (method == 'numeric') {
-        expect(find.text('Progres: 1 / 7 halaman', findRichText: true),
-            findsOneWidget);
+        expect(
+            tester
+                .widget<TextField>(find.byKey(const Key('goal-value-goal')))
+                .controller!
+                .text,
+            '1');
+        expect(find.text('/ 7 halaman'), findsOneWidget);
         TextDecoration? titleDecoration() =>
             tester.widget<Text>(find.text('Membaca buku')).style?.decoration;
         expect(titleDecoration(), isNull);

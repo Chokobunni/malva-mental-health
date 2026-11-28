@@ -364,11 +364,18 @@ func goalStreak(d *GoalDetails, logs []HabitLog, on, today time.Time) int {
 	count := 0
 	for _, l := range applicable {
 		date, _ := goalDate(l.LoggedOn)
-		// Today may remain pending; an explicit incomplete log still breaks streak.
+		// Numeric/checklist progress can still be completed today. Only elapsed
+		// partial progress breaks a streak; an explicit yes/no failure does so now.
+		if date.Equal(today) && d != nil && d.Method != "yes_no" && !goalLogDone(d, l) {
+			continue
+		}
+		// Today may remain pending without a log as well.
 		if hasExpected && expected.Equal(today) && date.Before(today) {
 			expected, hasExpected = previousGoalDue(d, today.AddDate(0, 0, -1))
 		}
-		if d != nil && d.AutoFail && hasExpected && !date.Equal(expected) {
+		// A streak counts consecutive scheduled completions. AutoFail controls
+		// display of missed dates, not whether a missing occurrence is completed.
+		if d != nil && hasExpected && !date.Equal(expected) {
 			return count
 		}
 		if !goalLogDone(d, l) {

@@ -11,7 +11,7 @@ import (
 	"malva/backend/internal/clock"
 )
 
-var ErrCareCancellationStarted = errors.New("sesi sudah dimulai dan tidak bisa dibatalkan")
+var ErrCareCancellationEnded = errors.New("sesi sudah berakhir dan tidak bisa dibatalkan")
 var ErrCareCancellationRefundManual = errors.New("refund sesi memerlukan penanganan manual")
 
 const automaticRefundPrefix = "auto:session-cancellation:"
@@ -37,8 +37,9 @@ func (s *Store) CancelCareSession(ctx context.Context, sessionID, role, actorID,
 	var current, patient, professional, method string
 	var bookingID, packageID sql.NullString
 	var start time.Time
-	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id, scheduled_at, booking_id, package_id, session_type
-		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &patient, &professional, &start, &bookingID, &packageID, &method); err != nil {
+	var duration int
+	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id, scheduled_at, duration_minutes, booking_id, package_id, session_type
+		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &patient, &professional, &start, &duration, &bookingID, &packageID, &method); err != nil {
 		return CareSession{}, CareRefund{}, nil, err
 	}
 	isPatient := role == "patient" && actorID == patient
@@ -66,8 +67,8 @@ func (s *Store) CancelCareSession(ctx context.Context, sessionID, role, actorID,
 		return CareSession{}, CareRefund{}, nil, ErrCareSessionTerminal
 	}
 	now := clock.Now()
-	if !now.Before(start) {
-		return CareSession{}, CareRefund{}, nil, ErrCareCancellationStarted
+	if !now.Before(start.Add(time.Duration(duration) * time.Minute)) {
+		return CareSession{}, CareRefund{}, nil, ErrCareCancellationEnded
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE care_sessions SET status=$2,cancel_reason=$3,cancelled_by=$4,updated_at=$5
 		WHERE id=$1`, sessionID, status, strings.TrimSpace(reason), actorID, now); err != nil {

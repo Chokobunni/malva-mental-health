@@ -1364,12 +1364,8 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 			writeError(w, http.StatusForbidden, err)
 			return
 		}
-		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
-			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
-			return
-		}
 		patientID = resolved
-		if _, ok := s.requireClinicalSession(w, r, claims, patientID); !ok {
+		if !s.requireSessionNoteMutation(w, r, claims, patientID, "medications") {
 			return
 		}
 	} else if claims.Role != "patient" {
@@ -1447,11 +1443,7 @@ func (s *Server) resolveMedicationPatient(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusForbidden, err)
 			return "", false
 		}
-		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
-			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
-			return "", false
-		}
-		if _, ok := s.requireClinicalSession(w, r, claims, resolved); !ok {
+		if !s.requireSessionNoteMutation(w, r, claims, resolved, "medications") {
 			return "", false
 		}
 		return resolved, true
@@ -1808,7 +1800,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		text = text[:5000]
 	}
 	kind := strings.ToLower(strings.TrimSpace(req.Kind))
-	if claims.Role != "professional" && (kind == "attachment" || kind == "assessment_request" || kind == "therapy_request" || kind == "session_summary") {
+	if claims.Role != "professional" && (kind == "attachment" || kind == "assessment_request" || kind == "therapy_request" || kind == "session_summary" || kind == "session_follow_up") {
 		writeError(w, http.StatusForbidden, errors.New("kartu ini hanya dapat dikirim profesional sesi"))
 		return
 	}
@@ -1834,7 +1826,17 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		writeError(w, http.StatusInternalServerError, aerr)
 		return
 	}
-	if isShare {
+	followUpID := ""
+	if kind == "session_follow_up" {
+		var metadata json.RawMessage
+		followUpID, metadata, err = s.store.ValidateSessionFollowUp(r.Context(), patientID, professionalID, req.Metadata)
+		if err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
+		req.Metadata = metadata
+		text = "Rekomendasi Sesi Lanjutan"
+	} else if isShare {
 		if claims.Role == "professional" {
 			metadata, err := s.store.ValidateProfessionalChatCard(r.Context(), patientID, professionalID, kind, req.Metadata, access)
 			if err != nil {
@@ -1855,7 +1857,9 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		senderName = user.DisplayName
 	}
 	messageID := generateChatMessageID()
-	if req.ClientMessageID != "" {
+	if followUpID != "" {
+		messageID = store.ClinicalRetryID("session_follow_up", claims.Subject, followUpID)
+	} else if req.ClientMessageID != "" {
 		if !store.ValidClinicalClientID(req.ClientMessageID) {
 			writeError(w, http.StatusBadRequest, errors.New("client_message_id harus UUID"))
 			return

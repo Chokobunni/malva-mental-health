@@ -41,7 +41,10 @@ class _Client extends http.BaseClient {
         'duration_minutes': 30,
         'status': 'scheduled',
         'meeting_url': 'https://meet.google.com/abc-defg-hij',
-        if (attended) 'attended_marked_at': wibIso(wibNow()),
+        if (attended) ...{
+          'attended_marked_at': wibIso(wibNow()),
+          'professional_attendance': 'attended',
+        },
       };
 
   @override
@@ -381,10 +384,7 @@ void main() {
   testWidgets('schedule detail keeps the authenticated professional session',
       (tester) async {
     final client = await _mount(tester);
-    await tester.scrollUntilVisible(find.text('Aksi lain'), 120);
-    await tester.ensureVisible(find.text('Aksi lain').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Aksi lain').first);
+    await tester.scrollUntilVisible(find.text('Profil'), 120);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Profil').first);
     await tester.pumpAndSettle();
@@ -410,12 +410,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final client = await _mount(tester);
     await tester.scrollUntilVisible(
-        find.widgetWithText(OutlinedButton, 'Hadir'), 200,
+        find.widgetWithText(FilledButton, 'Hadir'), 200,
         scrollable: find.byType(Scrollable).first);
     await tester
-        .ensureVisible(find.widgetWithText(OutlinedButton, 'Hadir').first);
+        .ensureVisible(find.widgetWithText(FilledButton, 'Hadir').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Hadir').first);
+    await tester.tap(find.widgetWithText(FilledButton, 'Hadir').first);
     await tester.pumpAndSettle();
     final request =
         client.requests.singleWhere((request) => request.method == 'PATCH');
@@ -425,6 +425,7 @@ void main() {
     expect(
         find.text('Kehadiran dicatat. Sesi tetap berjalan sampai waktu habis.'),
         findsOneWidget);
+    expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Chat'), findsWidgets);
     await tester.pumpWidget(const SizedBox());
   });

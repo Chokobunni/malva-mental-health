@@ -201,18 +201,23 @@ void main() {
     await tapGoalControl(tester, find.byIcon(Icons.calendar_today_outlined));
     await tester.tap(find.byTooltip('Switch to input'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField),
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(DatePickerDialog),
+            matching: find.byType(TextField)),
         '${yesterday.month}/${yesterday.day}/${yesterday.year}');
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(find.text('Progres: 14 / 20 halaman', findRichText: true),
-        findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '14');
+    expect(find.text('/ 20 halaman'), findsOneWidget);
     await tapGoalControl(tester, find.byTooltip('Edit goal'));
     await tester.enterText(find.byKey(const Key('goal-title')), 'Baca baru');
     await tapGoalControl(tester, find.text('Simpan Perubahan'));
     expect(find.text('Baca baru'), findsOneWidget);
-    expect(find.text('Progres: 14 / 20 halaman', findRichText: true),
-        findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '14');
+    expect(find.text('/ 20 halaman'), findsOneWidget);
   });
   for (final numeric in [true, false]) {
     testWidgets(
@@ -299,10 +304,14 @@ void main() {
           numeric
               ? find.byTooltip('Tambah progres Baca')
               : find.text('Siapkan buku'));
-      expect(
-          find.text(numeric ? 'Progres: 15 / 20 halaman' : '1/2 selesai',
-              findRichText: true),
-          findsOneWidget);
+      if (numeric) {
+        expect(
+            tester.widget<TextField>(find.byType(TextField)).controller!.text,
+            '15');
+        expect(find.text('/ 20 halaman'), findsOneWidget);
+      } else {
+        expect(find.text('1/2 selesai'), findsOneWidget);
+      }
       expect(posted, isTrue);
     });
   }

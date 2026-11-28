@@ -56,6 +56,40 @@ func (f clinicalFixture) call(t *testing.T, method, path, role, subject string, 
 	return doAuthed(t, f.srv.Routes(), method, path, token, string(raw))
 }
 
+func TestCompletedStandaloneSessionFollowUpOnlyOnce(t *testing.T) {
+	f := newClinicalFixture(t)
+	if _, err := f.db.Exec(`UPDATE care_sessions SET scheduled_at=$2,status='completed',
+		patient_attendance='attended',professional_attendance='attended' WHERE id=$1`, f.sessionID, clock.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	meta := map[string]any{"session_id": f.sessionID, "interval_days": 7, "insight": "Synthetic note"}
+	body := map[string]any{"recipient_id": f.patient.ID, "kind": "session_follow_up", "metadata": meta}
+	for range 2 {
+		if got := f.call(t, "POST", "/v1/messages", "professional", f.prof.ID, body); got.Code != http.StatusCreated {
+			t.Fatalf("follow-up: %d %s", got.Code, got.Body)
+		}
+	}
+	var count int
+	if err := f.db.QueryRow(`SELECT count(*) FROM chat_messages WHERE patient_id=$1 AND kind='session_follow_up'`, f.patient.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("follow-up count %d, error %v", count, err)
+	}
+	var packageID string
+	if err := f.db.QueryRow(`INSERT INTO care_packages(patient_id,professional_id,price,status,expires_at)
+		VALUES($1,$2,100000,'active',$3) RETURNING id`, f.patient.ID, f.prof.ID, clock.Now().Add(time.Hour)).Scan(&packageID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`UPDATE care_sessions SET package_id=$2 WHERE id=$1`, f.sessionID, packageID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.call(t, "POST", "/v1/messages", "professional", f.prof.ID, body); got.Code != http.StatusForbidden {
+		t.Fatalf("package recommendation: %d %s", got.Code, got.Body)
+	}
+	body["recipient_id"] = f.prof.ID
+	if got := f.call(t, "POST", "/v1/messages", "patient", f.patient.ID, body); got.Code != http.StatusForbidden {
+		t.Fatalf("patient recommendation: %d %s", got.Code, got.Body)
+	}
+}
+
 func TestClinicalProfessionalCards(t *testing.T) {
 	f := newClinicalFixture(t)
 	goal, err := f.st.CreateGoal(context.Background(), store.UpsertGoalParams{PatientID: f.patient.ID, Title: "Walk"})

@@ -29,6 +29,7 @@ import 'chat/professional_chat_tools.dart';
 import 'chat/clinical_chat_card.dart';
 import 'chat/chat_shared_record_card.dart';
 import 'chat/session_cancellation_card.dart';
+import 'chat/session_follow_up_card.dart';
 import 'assessment_screen.dart';
 import 'booking/doctor_profile_screen.dart';
 import 'portal/shared_patient_data_screen.dart';
@@ -72,6 +73,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   static const _historyLimit = 100;
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  bool _showLatestButton = false;
   final _messages = <ChatMessage>[];
   final _deletedMessageIds = <String>{};
   final _pendingMessageDeletes = <String>{};
@@ -114,6 +116,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_updateLatestButton);
     _owner = _ownerKey(ref.read(currentSessionProvider));
     _startAccessPoll();
     // Tandai percakapan ini sebagai aktif agar notifikasi chat untuk peer yang
@@ -519,10 +522,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  bool get _atLatest =>
+      !_scrollController.hasClients ||
+      _scrollController.position.pixels <=
+          _scrollController.position.minScrollExtent + 24;
+
+  void _updateLatestButton() {
+    final show = !_atLatest;
+    if (_showLatestButton != show && mounted) {
+      setState(() => _showLatestButton = show);
+    }
+  }
+
   void _scrollToBottom({bool animated = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      final target = _scrollController.position.maxScrollExtent;
+      if (!mounted || !_scrollController.hasClients) return;
+      final target = _scrollController.position.minScrollExtent;
       if (animated) {
         _scrollController.animateTo(
           target,
@@ -533,6 +548,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _scrollController.jumpTo(target);
       }
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _initChat([AuthSession? refreshedSession]) {
@@ -573,8 +589,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (!mounted || !_ownerMatches) return;
       // Hindari duplikat (mis. share dikirim via REST + echo WS).
       if (_hasMessage(msg.id)) return;
+      final follow = msg.isMine || _atLatest;
       setState(() => _messages.add(msg));
-      _scrollToBottom();
+      if (follow) _scrollToBottom();
     });
 
     _messageDeletedSub =
@@ -1913,15 +1930,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           Expanded(
             child: _messages.isEmpty
                 ? _EmptyChat(state: _chatState)
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    itemCount: _messages.length +
-                        (_olderHistoryCursor == null ? 0 : 1),
-                    itemBuilder: (context, index) {
-                      if (_olderHistoryCursor != null) {
-                        if (index == 0) {
+                : Stack(children: [
+                    ListView.builder(
+                      reverse: true,
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      itemCount: _messages.length +
+                          (_olderHistoryCursor == null ? 0 : 1),
+                      itemBuilder: (context, index) {
+                        if (index == _messages.length) {
                           return Center(
                               child: TextButton(
                             onPressed: _loadingOlderHistory
@@ -1932,137 +1950,180 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                 : 'Muat pesan sebelumnya'),
                           ));
                         }
-                        index--;
-                      }
-                      final msg = _messages[index];
-                      final onDelete = msg.isMine && msg.id.isNotEmpty
-                          ? () => _confirmDeleteMessage(msg)
-                          : null;
-                      final showTimestamp = index == 0 ||
-                          formatWibDate(_messages[index - 1].timestamp) !=
-                              formatWibDate(msg.timestamp);
-                      return Column(
-                        key: ValueKey(msg.id),
-                        children: [
-                          if (showTimestamp)
-                            _TimestampLabel(date: msg.timestamp),
-                          const SizedBox(height: 6),
-                          if (msg.kind == 'session_cancellation')
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: SessionCancellationCard(message: msg),
-                            )
-                          else if (const [
-                                'summary',
-                                'progress',
-                                'goals',
-                                'habits',
-                                'assessment',
-                                'screening',
-                                'prescription',
-                                'medication',
-                                'diary'
-                              ].contains(msg.kind) ||
-                              msg.kind == 'worksheet')
-                            Align(
+                        index = _messages.length - 1 - index;
+                        final msg = _messages[index];
+                        final onDelete = msg.isMine && msg.id.isNotEmpty
+                            ? () => _confirmDeleteMessage(msg)
+                            : null;
+                        final showTimestamp = index == 0 ||
+                            formatWibDate(_messages[index - 1].timestamp) !=
+                                formatWibDate(msg.timestamp);
+                        return Column(
+                          key: ValueKey(msg.id),
+                          children: [
+                            if (showTimestamp)
+                              _TimestampLabel(date: msg.timestamp),
+                            const SizedBox(height: 6),
+                            if (msg.kind == 'session_cancellation')
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: SessionCancellationCard(message: msg),
+                              )
+                            else if (msg.kind == 'session_follow_up')
+                              Align(
                                 alignment: msg.isMine
                                     ? Alignment.centerRight
                                     : Alignment.centerLeft,
-                                child: Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    constraints: BoxConstraints(
-                                        maxWidth:
-                                            MediaQuery.sizeOf(context).width *
-                                                (const ['goals', 'habits']
-                                                        .contains(msg.kind)
-                                                    ? .86
-                                                    : const [
-                                                        'medication',
-                                                        'prescription',
-                                                        'diary',
-                                                        'assessment',
-                                                        'screening',
-                                                        'worksheet'
-                                                      ].contains(msg.kind)
-                                                        ? .90
-                                                        : .70)),
-                                    child: _ChatMessageActions(
-                                      onDelete: onDelete,
-                                      child: ChatSharedRecordCard(
-                                          key: ValueKey(msg.id),
-                                          message: msg,
-                                          guardDetail: (detail) =>
-                                              _guardAssessmentDetail(
-                                                  msg.id, detail),
-                                          onOpenRecord: msg.kind == 'worksheet'
-                                              ? () => _openSharedRecord(msg)
-                                              : null,
-                                          onOpenDiary: msg.kind == 'diary'
-                                              ? () => _showDiaryDetail(msg)
-                                              : null),
-                                    )))
-                          else if (const [
-                                'assessment_request',
-                                'therapy_request',
-                                'session_summary',
-                                'attachment'
-                              ].contains(msg.kind) ||
-                              (msg.kind == 'goals' &&
-                                  msg.metadata?['session_id'] != null &&
-                                  msg.senderId ==
-                                      (_isPatient
-                                          ? widget.otherUserId
-                                          : (ref
-                                                  .read(currentSessionProvider)
-                                                  ?.backendUserId ??
-                                              ref
-                                                  .read(currentSessionProvider)
-                                                  ?.identifier))))
-                            Align(
-                                alignment: msg.isMine
-                                    ? Alignment.centerRight
-                                    : Alignment.centerLeft,
-                                child: Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    constraints: BoxConstraints(
-                                        maxWidth:
-                                            MediaQuery.of(context).size.width *
-                                                (const [
-                                                  'session_summary',
-                                                  'assessment_request',
-                                                  'therapy_request'
-                                                ].contains(msg.kind)
-                                                    ? .95
-                                                    : .85)),
-                                    child: _ChatMessageActions(
-                                      onDelete: onDelete,
-                                      child: ClinicalChatCard(
-                                          message: msg,
-                                          isPatient: _isPatient,
-                                          onAction: () =>
-                                              _openClinicalCard(msg)),
-                                    )))
-                          else
-                            _ChatBubble(
-                              message: msg,
-                              onDelete: onDelete,
-                              isProfessional: _isPatient != msg.isMine,
-                              senderPhotoUrl:
-                                  _professionalPhotoUrl.isEmpty && _isPatient
-                                      ? _photoUrl
-                                      : _professionalPhotoUrl,
-                              senderPatientAvatar: _patientAvatar,
-                              senderRole: _isPatient != msg.isMine
-                                  ? _professionalRole
-                                  : 'Pasien',
-                              onOpenRecord: msg.kind == 'worksheet'
-                                  ? () => _openSharedRecord(msg)
-                                  : null,
-                            ),
-                        ],
-                      );
-                    },
-                  ),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                      maxWidth:
+                                          MediaQuery.sizeOf(context).width *
+                                              .88),
+                                  child: SessionFollowUpCard(
+                                    message: msg,
+                                    onBook: _isPatient
+                                        ? () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      DoctorProfileScreen(
+                                                        doctorUserId:
+                                                            widget.otherUserId,
+                                                        doctorName: widget
+                                                            .otherUserName,
+                                                      )),
+                                            )
+                                        : null,
+                                  ),
+                                ),
+                              )
+                            else if (const [
+                                  'summary',
+                                  'progress',
+                                  'goals',
+                                  'habits',
+                                  'assessment',
+                                  'screening',
+                                  'prescription',
+                                  'medication',
+                                  'diary'
+                                ].contains(msg.kind) ||
+                                msg.kind == 'worksheet')
+                              Align(
+                                  alignment: msg.isMine
+                                      ? Alignment.centerRight
+                                      : Alignment.centerLeft,
+                                  child: Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      constraints: BoxConstraints(
+                                          maxWidth:
+                                              MediaQuery.sizeOf(context).width *
+                                                  (const ['goals', 'habits']
+                                                          .contains(msg.kind)
+                                                      ? .86
+                                                      : const [
+                                                          'medication',
+                                                          'prescription',
+                                                          'diary',
+                                                          'assessment',
+                                                          'screening',
+                                                          'worksheet'
+                                                        ].contains(msg.kind)
+                                                          ? .90
+                                                          : .70)),
+                                      child: _ChatMessageActions(
+                                        onDelete: onDelete,
+                                        child: ChatSharedRecordCard(
+                                            key: ValueKey(msg.id),
+                                            message: msg,
+                                            guardDetail: (detail) =>
+                                                _guardAssessmentDetail(
+                                                    msg.id, detail),
+                                            onOpenRecord: msg.kind ==
+                                                    'worksheet'
+                                                ? () => _openSharedRecord(msg)
+                                                : null,
+                                            onOpenDiary: msg.kind == 'diary'
+                                                ? () => _showDiaryDetail(msg)
+                                                : null),
+                                      )))
+                            else if (const [
+                                  'assessment_request',
+                                  'therapy_request',
+                                  'session_summary',
+                                  'attachment'
+                                ].contains(msg.kind) ||
+                                (msg.kind == 'goals' &&
+                                    msg.metadata?['session_id'] != null &&
+                                    msg.senderId ==
+                                        (_isPatient
+                                            ? widget.otherUserId
+                                            : (ref
+                                                    .read(
+                                                        currentSessionProvider)
+                                                    ?.backendUserId ??
+                                                ref
+                                                    .read(
+                                                        currentSessionProvider)
+                                                    ?.identifier))))
+                              Align(
+                                  alignment: msg.isMine
+                                      ? Alignment.centerRight
+                                      : Alignment.centerLeft,
+                                  child: Container(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      constraints: BoxConstraints(
+                                          maxWidth: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              (const [
+                                                'session_summary',
+                                                'assessment_request',
+                                                'therapy_request'
+                                              ].contains(msg.kind)
+                                                  ? .95
+                                                  : .85)),
+                                      child: _ChatMessageActions(
+                                        onDelete: onDelete,
+                                        child: ClinicalChatCard(
+                                            message: msg,
+                                            isPatient: _isPatient,
+                                            onAction: () =>
+                                                _openClinicalCard(msg)),
+                                      )))
+                            else
+                              _ChatBubble(
+                                message: msg,
+                                onDelete: onDelete,
+                                isProfessional: _isPatient != msg.isMine,
+                                senderPhotoUrl:
+                                    _professionalPhotoUrl.isEmpty && _isPatient
+                                        ? _photoUrl
+                                        : _professionalPhotoUrl,
+                                senderPatientAvatar: _patientAvatar,
+                                senderRole: _isPatient != msg.isMine
+                                    ? _professionalRole
+                                    : 'Pasien',
+                                onOpenRecord: msg.kind == 'worksheet'
+                                    ? () => _openSharedRecord(msg)
+                                    : null,
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    if (_showLatestButton)
+                      Positioned(
+                        right: 16,
+                        bottom: 12,
+                        child: FloatingActionButton.small(
+                          heroTag: null,
+                          tooltip: 'Ke pesan terbaru',
+                          onPressed: _scrollToBottom,
+                          child: const Icon(Icons.keyboard_arrow_down_rounded),
+                        ),
+                      ),
+                  ]),
           ),
           if (_accessLoaded && _isDeadConversation && _isPatient)
             _BookSessionCta(

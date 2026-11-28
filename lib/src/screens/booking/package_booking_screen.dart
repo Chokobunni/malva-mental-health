@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/booking_slots_empty.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
@@ -761,7 +762,7 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                         onRetry: () async =>
                             setState(() => _availability = _loadDays()))
                   else if (days.data!.isEmpty)
-                    const Text('Belum ada jadwal tersedia.')
+                    const BookingSlotsEmpty()
                   else ...[
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -817,7 +818,7 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                                 error: slots.error!,
                                 onRetry: () async => _selectDate(_date!))
                           else if (loaded && available.isEmpty)
-                            const Text('Tidak ada slot bebas pada tanggal ini.')
+                            const BookingSlotsEmpty()
                           else if (loaded)
                             Wrap(
                               spacing: 8,

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"malva/backend/internal/clock"
 )
 
 func ClinicalRetryID(namespace, senderID, key string) string {
@@ -120,6 +122,38 @@ func (s *Store) ValidateProfessionalChatCard(ctx context.Context, patientID, pro
 		return json.Marshal(enriched)
 	}
 	return metadata, nil
+}
+
+// ValidateSessionFollowUp binds a recommendation to one completed standalone session.
+func (s *Store) ValidateSessionFollowUp(ctx context.Context, patientID, professionalID string, raw json.RawMessage) (string, json.RawMessage, error) {
+	denied := errors.New("rekomendasi hanya tersedia untuk sesi sekali yang telah selesai")
+	var meta struct {
+		SessionID string `json:"session_id"`
+		Days      int    `json:"interval_days"`
+		Insight   string `json:"insight,omitempty"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if len(raw) > 8192 || decoder.Decode(&meta) != nil || !ValidClinicalClientID(meta.SessionID) ||
+		(meta.Days != 7 && meta.Days != 14 && meta.Days != 30) {
+		return "", nil, denied
+	}
+	meta.Insight = strings.TrimSpace(meta.Insight)
+	if len(meta.Insight) > 2000 {
+		return "", nil, denied
+	}
+	session, err := s.GetCareSession(ctx, meta.SessionID)
+	if err != nil || session.PatientID != patientID || session.ProfessionalID != professionalID ||
+		session.PackageID != nil || session.PatientAttendance != "attended" ||
+		session.ProfessionalAttendance != "attended" || !session.CanWriteNotesAt(clock.Now()) {
+		return "", nil, denied
+	}
+	credential, err := s.GetProfessionalCredential(ctx, professionalID)
+	if err != nil || credential.VerificationStatus != "VERIFIED" {
+		return "", nil, denied
+	}
+	metadata, err := json.Marshal(meta)
+	return session.ID, metadata, err
 }
 
 func validClinicalRequestModule(kind, moduleID string) bool {

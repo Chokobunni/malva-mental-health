@@ -1226,6 +1226,11 @@ func (cs CareSession) CanWriteNotesAt(now time.Time) bool {
 	return cs.Status == "completed" && !now.Before(end) && now.Before(end.Add(24*time.Hour))
 }
 
+func (cs CareSession) CanManageNoteResourcesAt(now time.Time) bool {
+	end := cs.ScheduledAt.Add(time.Duration(cs.DurationMinutes) * time.Minute)
+	return cs.CanWriteNotesAt(now) || (cs.Status == "scheduled" && !now.Before(cs.ScheduledAt) && now.Before(end))
+}
+
 var ErrSessionNotesClosed = errors.New("batas waktu pengisian catatan sesi berakhir")
 
 // UpdateCareSessionDetail meeting_url / ringkasan sesi / catatan privat.

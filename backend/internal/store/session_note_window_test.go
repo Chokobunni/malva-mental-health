@@ -30,6 +30,28 @@ func TestSessionNoteWindow(t *testing.T) {
 		t.Fatal("incomplete session allowed")
 	}
 }
+
+func TestSessionNoteResourceWindow(t *testing.T) {
+	start := time.Date(2026, 11, 28, 10, 0, 0, 0, clock.Location())
+	for _, tc := range []struct {
+		status string
+		at     time.Time
+		want   bool
+	}{
+		{"scheduled", start.Add(-time.Nanosecond), false},
+		{"scheduled", start, true},
+		{"scheduled", start.Add(time.Hour), false},
+		{"completed", start.Add(time.Hour), true},
+		{"completed", start.Add(25*time.Hour - time.Nanosecond), true},
+		{"completed", start.Add(25 * time.Hour), false},
+		{"cancelled_by_patient", start.Add(2 * time.Hour), false},
+	} {
+		cs := CareSession{ScheduledAt: start, DurationMinutes: 60, Status: tc.status}
+		if got := cs.CanManageNoteResourcesAt(tc.at); got != tc.want {
+			t.Fatalf("%s at %s: got %t want %t", tc.status, tc.at, got, tc.want)
+		}
+	}
+}
 func TestSaveCareSessionNotesIssuesPrescriptionOnce(t *testing.T) {
 	s, db, ctx := attendedTestStore(t)
 	sessionID, patientID, professionalID := mustUUID(t, db, ctx), mustUUID(t, db, ctx), mustUUID(t, db, ctx)

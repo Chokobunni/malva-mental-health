@@ -112,14 +112,25 @@ void main() {
                   otherUserName: 'Profesional', otherUserId: 'pro1')),
         )));
     await waitForSockets(tester, sockets, 1);
+    expect(find.text('Pesan 0'), findsOneWidget);
+    final jump = find.byTooltip('Ke pesan terbaru');
+    expect(jump, findsNothing);
     final loadOlder = find.text('Muat pesan sebelumnya');
-    await tester.scrollUntilVisible(loadOlder, -500,
+    await tester.scrollUntilVisible(loadOlder, 500,
         scrollable: find.byType(Scrollable).first);
+    expect(jump, findsOneWidget);
     await tester.tap(loadOlder);
     await tester.pump();
     expect(cursors.last, 'recent-99');
     expect(find.text('Pesan lebih lama'), findsOneWidget);
     expect(loadOlder, findsNothing);
+    await tester.tap(jump);
+    // Ignore the chat connection indicator's repeating animation.
+    for (var frame = 0; frame < 8; frame++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Pesan 0'), findsOneWidget);
+    expect(jump, findsNothing);
     await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
     await tester.pump(const Duration(milliseconds: 100));
   });

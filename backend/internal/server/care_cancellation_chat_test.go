@@ -19,9 +19,11 @@ func TestCancelledSessionAppearsInBothChatHistories(t *testing.T) {
 		{"patient", 2 * time.Hour, "refund", false},
 		{"patient", 30 * time.Minute, "penalty", false},
 		{"professional", 30 * time.Minute, "refund", false},
+		{"patient", -time.Minute, "penalty", false},
 		{"patient", 2 * time.Hour, "credit", true},
 		{"patient", 30 * time.Minute, "penalty", true},
 		{"professional", 30 * time.Minute, "credit", true},
+		{"professional", -time.Minute, "credit", true},
 	} {
 		t.Run(tc.role+"/"+tc.outcome, func(t *testing.T) {
 			f := newClinicalFixture(t)

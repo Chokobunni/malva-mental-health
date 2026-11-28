@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -101,6 +102,49 @@ Future<void> mountDetail(WidgetTester tester,
 
 void main() {
   setUp(initializeWib);
+
+  testWidgets('check-in before scheduled start never adds session minutes',
+      (tester) async {
+    await mountDetail(tester, role: UserRole.professional, data: {
+      ...sessionJson(),
+      'scheduled_at': wibIso(ServerClock.now().add(const Duration(minutes: 8))),
+    });
+    await tester.scrollUntilVisible(find.text('Sesi Dimulai Dalam'), 150,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Sesi Dimulai Dalam'), findsOneWidget);
+    expect(find.text('Sisa Waktu Sesi'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Check-in kehadiran'), 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.widgetWithText(FilledButton, 'Hadir'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('package completion prompt omits recommendation and opens once',
+      (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final data = <String, dynamic>{
+      ...sessionJson(status: 'completed', attended: true, packageId: 'pack'),
+      'professional_attendance': 'attended',
+      'scheduled_at':
+          wibIso(ServerClock.now().subtract(const Duration(minutes: 61))),
+    };
+    await mountDetail(tester, role: UserRole.professional, data: data);
+    await tester.pumpAndSettle();
+    final dialog = find.byType(AlertDialog);
+    expect(dialog, findsOneWidget);
+    expect(find.text('Rekomendasikan sesi lanjutan'), findsNothing);
+    await tester.tap(find.descendant(of: dialog, matching: find.text('Nanti')));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await mountDetail(tester, role: UserRole.professional, data: data);
+    await tester.pumpAndSettle();
+    expect(dialog, findsNothing);
+    await tester.scrollUntilVisible(
+        find.text('Batas Waktu Pengisian Catatan'), 150,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Batas Waktu Pengisian Catatan'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('expired professional detail locks new session notes',
       (tester) async {

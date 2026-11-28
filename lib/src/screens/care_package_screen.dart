@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/booking_slots_empty.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
@@ -1455,6 +1456,7 @@ class _FirstSessionSlots extends StatefulWidget {
 }
 
 class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
+  int _request = 0;
   List<BackendDoctorSlot> _slots = const [];
   bool _loading = true;
   String? _error;
@@ -1468,11 +1470,15 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
   @override
   void didUpdateWidget(covariant _FirstSessionSlots oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.date != widget.date) _load();
+    if (oldWidget.date != widget.date ||
+        oldWidget.serviceCategory != widget.serviceCategory ||
+        oldWidget.professionalId != widget.professionalId ||
+        oldWidget.accessToken != widget.accessToken) _load();
   }
 
   Future<void> _load() async {
     final date = widget.date;
+    final request = ++_request;
     setState(() {
       _loading = true;
       _error = null;
@@ -1484,13 +1490,13 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
         date: date,
         serviceCategory: widget.serviceCategory,
       );
-      if (!mounted || date != widget.date) return;
+      if (!mounted || request != _request) return;
       setState(() {
         _slots = slots;
         _loading = false;
       });
     } on Object catch (e) {
-      if (!mounted || date != widget.date) return;
+      if (!mounted || request != _request) return;
       setState(() {
         _loading = false;
         _error = friendlyErrorMessage(e);
@@ -1516,9 +1522,7 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
       return starts != null && starts.isBefore(expires);
     }).toList(growable: false);
     if (free.isEmpty) {
-      return Text('Slot hari ini penuh. Pilih hari lain.',
-          style:
-              TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant));
+      return const BookingSlotsEmpty();
     }
     return LayoutBuilder(builder: (context, constraints) {
       final columns = constraints.maxWidth >= 300 ? 4 : 3;

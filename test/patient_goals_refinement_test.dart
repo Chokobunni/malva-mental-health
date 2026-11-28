@@ -311,8 +311,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.getTopLeft(title).dy, closeTo(before, .1));
         expect(position.pixels, closeTo(offset, .1));
-        if (method == 'numeric')
-          expect(find.textContaining('Progres: '), findsOneWidget);
+        if (method == 'numeric') expect(find.text('Progres:'), findsOneWidget);
         if (method == 'checklist')
           expect(find.text('1/1 selesai'), findsOneWidget);
       });

@@ -110,11 +110,7 @@ func (s *Server) createGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		if !s.requireVerifiedProfessional(w, r, claims) {
 			return
 		}
-		if !s.consentAllows(r, patientID, claims.Subject, "goals") {
-			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data tujuan"))
-			return
-		}
-		if _, ok := s.requireClinicalSession(w, r, claims, patientID); !ok {
+		if !s.requireSessionNoteMutation(w, r, claims, patientID, "goals") {
 			return
 		}
 	} else if !isSelf && claims.Role != "admin" {
@@ -172,7 +168,11 @@ func (s *Server) updateGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	if !isSelf && claims.Role != "admin" {
+	if claims.Role == "professional" && strings.TrimSpace(r.URL.Query().Get("session_id")) != "" {
+		if !s.requireVerifiedProfessional(w, r, claims) || !s.requireSessionNoteMutation(w, r, claims, patientID, "goals") {
+			return
+		}
+	} else if !isSelf && claims.Role != "admin" {
 		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mengubah goals"))
 		return
 	}

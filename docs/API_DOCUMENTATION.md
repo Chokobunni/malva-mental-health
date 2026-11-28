@@ -1704,3 +1704,11 @@ Storage marks counted sessions within the existing `habit_logs.value` integer as
 rows contribute one session regardless of a retained numeric amount, preventing
 method changes from inflating counts. Marked session values contribute zero
 numeric amount if the method changes to numeric. No schema or wire fields change.
+
+### Slot, sesi aktif, dan catatan sesi
+
+Perhitungan jumlah slot, pilihan jam, dan validasi booking pasien memakai batas minimal dua jam menuju awal slot, termasuk pada hari yang sama. Pilihan tetap mengikuti jam praktik, kapasitas, dan benturan sesi.
+
+Mutasi Target & Kebiasaan dan Obat dari editor profesional dapat menyertakan parameter sesi yang sudah digunakan oleh alur catatan. Server memeriksa profesional terverifikasi, relasi, persetujuan kategori, pasangan pasien pada sesi, dan jendela waktu. Editor menerima data aktif yang diizinkan selama sesi berjalan dan sebelum 24 jam setelah akhir sesi yang selesai. Hak mengelola obat mengikuti kewenangan resep.
+
+Pesan `session_follow_up` memakai endpoint pesan yang ada. Satu sesi sekali yang selesai dengan kedua pihak hadir dapat menghasilkan satu rekomendasi profesional. Sesi paket tidak menghasilkan pesan rekomendasi dari alur ini.

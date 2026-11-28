@@ -19,8 +19,10 @@ import '../widgets/malva_components.dart';
 import '../widgets/professional_schedule_calendar.dart';
 import '../widgets/care_session_card.dart';
 import '../widgets/professional_availability_summary.dart';
+import 'booking/booking_owner.dart';
 import 'chat_screen.dart';
 import 'pro_patient_detail_screen.dart';
+import 'professional_session_notes_screen.dart';
 
 // ============================================================
 // PRO SCHEDULE — tab "Jadwal" dashboard profesional:
@@ -45,6 +47,7 @@ class ProScheduleScreen extends ConsumerStatefulWidget {
 class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
     with WidgetsBindingObserver {
   late final CareSessionRefresh _sessionRefresh;
+  late final BookingOwner _owner;
   List<BackendCareSession> _today = const [];
   List<BackendCareSession> _upcoming = const [];
   List<BackendCareSession> _past = const [];
@@ -72,14 +75,24 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
   String? _error;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
+  AuthSession? get _scheduleOwner {
+    final owner = _owner.session;
+    return owner?.role == UserRole.professional &&
+            owner?.backendUserId == widget.session?.backendUserId &&
+            owner?.identifier == widget.session?.identifier
+        ? owner
+        : null;
+  }
+
   String? get _token {
-    final t = widget.session?.accessToken;
+    final t = _scheduleOwner?.accessToken;
     return (t == null || t.isEmpty) ? null : t;
   }
 
   @override
   void initState() {
     super.initState();
+    _owner = BookingOwner(ref, widget.session);
     WidgetsBinding.instance.addObserver(this);
     _sessionRefresh = CareSessionRefresh(() {
       if (!mounted) return;
@@ -129,7 +142,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
         _api.listCareSessions(accessToken: token, scope: 'upcoming'),
         _api.listCareSessions(accessToken: token, scope: 'past'),
       ]);
-      if (!mounted) return;
+      if (!mounted || _scheduleOwner == null) return;
       setState(() {
         _error = null;
         _today = results[0];
@@ -140,14 +153,52 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
         _isLoading = false;
       });
       _sessionRefresh.update([..._today, ..._upcoming, ..._past]);
+      unawaited(_offerCompletedSessions([..._today, ..._past]));
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || _scheduleOwner == null) return;
       setState(() {
         _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     } finally {
       _loadInProgress = false;
+    }
+  }
+
+  Future<void> _offerCompletedSessions(
+      List<BackendCareSession> sessions) async {
+    final seen = <String>{};
+    bool isOwner() => mounted && _scheduleOwner != null;
+    bool isCurrent() => isOwner() && ModalRoute.of(context)?.isCurrent == true;
+    if (!isCurrent()) return;
+    final viewer = _scheduleOwner!;
+    final token = viewer.accessToken;
+    if (token == null || token.isEmpty) return;
+    final api = _api;
+    for (final session in sessions) {
+      if (!isCurrent()) return;
+      if (session.professionalId != viewer.backendUserId ||
+          !seen.add(session.id)) continue;
+      final shown = await showCompletedSessionPrompt(
+        context: context,
+        ref: ref,
+        session: session,
+        token: token,
+        api: api,
+        isCurrent: isCurrent,
+        isOwner: isOwner,
+        onNotes: () async {
+          await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => ProfessionalSessionNotesScreen(
+              session: session,
+              accessToken: token,
+              apiClient: api,
+            ),
+          ));
+          if (isOwner()) await _load(silent: true);
+        },
+      );
+      if (shown) return;
     }
   }
 
@@ -445,12 +496,31 @@ class _ProSessionCard extends ConsumerWidget {
             onChanged: onChanged,
             accessToken: accessToken,
             apiClient: apiClient,
+            liveActionsOnly: true,
+            onReschedule: session.isBeforeJoinWindow
+                ? () => ProfessionalSessionActions(
+                      session: session,
+                      onChanged: onChanged,
+                      accessToken: accessToken,
+                      apiClient: apiClient,
+                    )._reschedule(context, ref)
+                : null,
+            onCancel: session.isBeforeJoinWindow
+                ? () => ProfessionalSessionActions(
+                      session: session,
+                      onChanged: onChanged,
+                      accessToken: accessToken,
+                      apiClient: apiClient,
+                      futureCancellationOnly: true,
+                    )._cancel(context, ref)
+                : null,
             onProfile: () =>
                 _openPatientDetail(context, ref, session, apiClient),
             onOpenChat: () => _openChat(context),
             otherActions: session.isScheduled && !session.isAfterJoinWindow
                 ? ProfessionalSessionActions(
                     session: session,
+                    liveLayout: true,
                     onChanged: onChanged,
                     accessToken: accessToken,
                     apiClient: apiClient)
@@ -485,12 +555,13 @@ class ProfessionalSessionActions extends ConsumerWidget {
       required this.onChanged,
       this.apiClient,
       this.accessToken,
-      this.futureCancellationOnly = false});
+      this.futureCancellationOnly = false,
+      this.liveLayout = false});
   final BackendCareSession session;
   final Future<void> Function() onChanged;
   final MalvaApiClient? apiClient;
   final String? accessToken;
-  final bool futureCancellationOnly;
+  final bool futureCancellationOnly, liveLayout;
 
   bool get _canCancel =>
       !futureCancellationOnly ||
@@ -500,6 +571,7 @@ class ProfessionalSessionActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
+          initiallyExpanded: liveLayout,
           tilePadding: const EdgeInsets.symmetric(horizontal: 13),
           childrenPadding: const EdgeInsets.all(12),
           backgroundColor: const Color(0xfff7f4fa),
@@ -538,13 +610,13 @@ class ProfessionalSessionActions extends ConsumerWidget {
                                       ? const Color(0xfff2dadd)
                                       : const Color(0xffece6f1)),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                              textStyle:
-                                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                                  borderRadius:
+                                      BorderRadius.circular(liveLayout ? 24 : 12)),
+                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           icon: Icon(icon, size: 17),
                           label: Text(label, textAlign: TextAlign.center)));
               return Wrap(spacing: 8, runSpacing: 8, children: [
-                if (!session.isVideo)
+                if (!session.isVideo && !liveLayout)
                   action(Icons.event_repeat, 'Reschedule',
                       () => _reschedule(context, ref),
                       full: true),
@@ -554,8 +626,9 @@ class ProfessionalSessionActions extends ConsumerWidget {
                     _canCancel ? () => _cancel(context, ref) : null,
                     danger: true),
                 if (session.isVideo) ...[
-                  action(Icons.event_repeat, 'Reschedule',
-                      () => _reschedule(context, ref)),
+                  if (!liveLayout)
+                    action(Icons.event_repeat, 'Reschedule',
+                        () => _reschedule(context, ref)),
                   action(Icons.link, 'Link', () async {
                     if (session.meetingUrl.trim().isEmpty) {
                       await _editLink(context, ref);
@@ -567,7 +640,7 @@ class ProfessionalSessionActions extends ConsumerWidget {
                             const SnackBar(
                                 content: Text('Link sesi disalin.')));
                     }
-                  })
+                  }, full: liveLayout)
                 ],
               ]);
             })

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/booking_slots_empty.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
@@ -157,6 +158,18 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       if (!mounted || request != _slotsRequest) return;
       setState(() {
         _slots = slots;
+        _days = [
+          for (final day in _days)
+            if (day.date == date)
+              BackendAvailabilityDay(
+                date: day.date,
+                dayOfWeek: day.dayOfWeek,
+                off: day.off,
+                freeSlots: slots.where((slot) => slot.available).length,
+              )
+            else
+              day,
+        ];
         _isLoadingSlots = false;
       });
     } on Object catch (e) {
@@ -266,12 +279,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           if (_isLoadingDays)
             const Center(child: CircularProgressIndicator())
           else if (_days.isEmpty || _selectedDate == null)
-            const EmptyState(
-              icon: Icons.event_busy_rounded,
-              title: 'Belum ada jadwal tersedia',
-              subtitle:
-                  'Profesional belum mengatur hari praktik / semua penuh 14 hari ke depan.',
-            )
+            const BookingSlotsEmpty()
           else
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -312,12 +320,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               subtitle: 'Jam tersedia muncul setelah tanggal dipilih.',
             )
           else if (_slots.where((s) => s.available).isEmpty)
-            const EmptyState(
-              icon: Icons.event_busy_rounded,
-              title: 'Tidak ada slot bebas',
-              subtitle:
-                  'Semua slot tanggal ini sudah terisi. Coba tanggal lain.',
-            )
+            const BookingSlotsEmpty()
           else
             LayoutBuilder(builder: (context, constraints) {
               final count = _slots.length <= 3 ? 3 : 4;

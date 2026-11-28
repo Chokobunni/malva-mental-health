@@ -10,13 +10,16 @@ class PatientSessionActions extends StatelessWidget {
       required this.session,
       this.onProfile,
       this.onCancel,
-      this.onReschedule});
+      this.onReschedule,
+      this.initiallyExpanded = false});
   final BackendCareSession session;
   final VoidCallback? onProfile, onCancel, onReschedule;
+  final bool initiallyExpanded;
   @override
   Widget build(BuildContext context) => Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 13),
           childrenPadding: const EdgeInsets.all(12),
           backgroundColor: const Color(0xfff7f4fa),
@@ -57,9 +60,9 @@ class PatientSessionActions extends StatelessWidget {
                                       ? const Color(0xfff2dadd)
                                       : const Color(0xffece6f1)),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                              textStyle: const TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w700)),
+                                  borderRadius: BorderRadius.circular(
+                                      initiallyExpanded ? 24 : 12)),
+                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                           icon: Icon(icon, size: 17),
                           label: Text(label, textAlign: TextAlign.center)));
               return Wrap(spacing: 8, runSpacing: 8, children: [
@@ -91,7 +94,8 @@ class PatientSessionActions extends StatelessWidget {
                                         const SnackBar(
                                             content:
                                                 Text('Link sesi disalin.')));
-                                })),
+                                },
+                          full: initiallyExpanded)),
                 ],
               ]);
             })

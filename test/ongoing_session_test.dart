@@ -195,8 +195,13 @@ void main() {
 
     expect(find.text('dr. Berjalan'), findsOneWidget);
     expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
-    expect(find.text('Gabung Sesi'), findsOneWidget,
+    expect(find.widgetWithText(FilledButton, 'Chat'), findsOneWidget,
         reason: 'konfirmasi hadir mempertahankan status scheduled');
+    expect(find.text('Aksi lain'), findsOneWidget);
+    expect(find.text('Profil'), findsOneWidget);
+    expect(find.text('Batal'), findsOneWidget);
+    expect(find.text('Link'), findsNothing);
+    expect(find.text('Reschedule'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Chat'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Hadir'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);

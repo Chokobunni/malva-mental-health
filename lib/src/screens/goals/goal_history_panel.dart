@@ -5,6 +5,7 @@ import '../../services/goal_history.dart';
 import '../../services/malva_api_client.dart';
 import '../../time/wib.dart';
 import 'goal_reference_widgets.dart';
+import 'goal_history_detail.dart';
 
 class GoalHistoryPanel extends StatelessWidget {
   const GoalHistoryPanel({
@@ -21,6 +22,8 @@ class GoalHistoryPanel extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRetry,
+    this.loadGoalForDate,
+    this.detailGuard,
   });
 
   final List<BackendGoal> goals;
@@ -34,6 +37,8 @@ class GoalHistoryPanel extends StatelessWidget {
   final VoidCallback onArchive, onRetry;
   final bool loading;
   final String? error;
+  final Future<BackendGoal?> Function(String id, String day)? loadGoalForDate;
+  final Widget Function(Widget child)? detailGuard;
 
   @override
   Widget build(BuildContext context) {
@@ -143,21 +148,30 @@ class GoalHistoryPanel extends StatelessWidget {
                                 fontFamily: 'PlusJakartaSans',
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600)),
-                        trailing: entry.goal.details?.method != 'numeric' &&
-                                entry.goal.details?.method != 'checklist' &&
-                                entry.log?.done == true
-                            ? const GoalPill('Selesai',
-                                icon: Icons.check,
-                                color: Color(0xFF14865B),
-                                background: Color(0xFFE0F5EA))
-                            : ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 104),
-                                child: Text(goalHistoryResult(entry),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.end,
-                                    style: const TextStyle(color: goalMuted))),
+                        trailing:
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                          entry.goal.details?.method != 'numeric' &&
+                                  entry.goal.details?.method != 'checklist' &&
+                                  entry.log?.done == true
+                              ? const GoalPill('Selesai',
+                                  icon: Icons.check,
+                                  color: Color(0xFF14865B),
+                                  background: Color(0xFFE0F5EA))
+                              : ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 104),
+                                  child: Text(goalHistoryResult(entry),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.end,
+                                      style:
+                                          const TextStyle(color: goalMuted))),
+                          const SizedBox(width: 4),
+                          Icon(Icons.chevron_right,
+                              color: const Color(0xFFC3BDC9),
+                              key: Key(
+                                  'goal-history-open-${entry.goal.id}-${day.key}')),
+                        ]),
                         onTap: () => _showDetails(context, day.key, entry),
                       ),
                     ]),
@@ -186,102 +200,10 @@ class GoalHistoryPanel extends StatelessWidget {
   }
 
   void _showDetails(BuildContext context, String day, GoalHistoryEntry entry) {
-    final log = entry.log;
-    final details = entry.goal.details;
-    final method = details?.method;
-    final numeric = method == 'numeric';
-    final checklist = method == 'checklist';
-    final total = numeric ? details!.target : details?.steps.length ?? 0;
-    final progress = numeric ? log?.value ?? 0 : completedGoalSteps(entry);
+    final detail =
+        GoalHistoryDetail(day: day, entry: entry, loadGoal: loadGoalForDate);
     showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-              title: const Text('Detail aktivitas',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-              scrollable: true,
-              backgroundColor: Colors.white,
-              content: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(entry.goal.title,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(_historyDayLabel(day),
-                        style: const TextStyle(color: goalMuted)),
-                    const SizedBox(height: 14),
-                    GoalSurface(
-                      color: const Color(0xFFF3E9FB),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (log != null && (numeric || checklist)) ...[
-                              Text(
-                                  'Progres tercatat: ${goalHistoryResult(entry)}',
-                                  style: const TextStyle(
-                                      color: goalPurple,
-                                      fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 8),
-                              LinearProgressIndicator(
-                                  value: total == 0
-                                      ? 0
-                                      : (progress / total).clamp(0.0, 1.0),
-                                  color: goalPurple),
-                              const SizedBox(height: 8),
-                            ],
-                            Text(log == null || (!numeric && !checklist)
-                                ? goalHistoryResult(entry)
-                                : log.done
-                                    ? 'Selesai'
-                                    : numeric
-                                        ? 'Belum tercapai'
-                                        : 'Belum selesai'),
-                          ]),
-                    ),
-                    if (details != null && details.steps.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      Text(checklist ? 'Daftar Langkah' : 'Rincian Aktivitas',
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                      for (final step in details.steps)
-                        Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                      checklist
-                                          ? log?.completedStepIds
-                                                      .contains(step.id) ==
-                                                  true
-                                              ? Icons.check_box_outlined
-                                              : Icons.check_box_outline_blank
-                                          : Icons.circle,
-                                      size: checklist ? 18 : 8,
-                                      color: goalPurple),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: Text(step.label)),
-                                ])),
-                    ],
-                    if (details?.note.isNotEmpty == true) ...[
-                      const SizedBox(height: 10),
-                      Text(details!.note),
-                    ],
-                  ]),
-              actions: [
-                SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF9711B3),
-                          textStyle: const TextStyle(
-                              fontFamily: 'PlusJakartaSans',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800)),
-                      child: const Text('Tutup'),
-                    )),
-              ],
-            ));
+        context: context, builder: (_) => detailGuard?.call(detail) ?? detail);
   }
 }
 
