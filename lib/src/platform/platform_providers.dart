@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 // Provider tunggal untuk seluruh UI. UI tidak pernah tahu platform:
 // ia hanya membaca provider ini, yang dirakit dari factory yang dipilih
 // compiler (platform_factory.dart).
@@ -11,6 +13,9 @@ final secureStoreProvider = Provider<SecureStore>((_) => createSecureStore());
 
 final fileExporterProvider =
     Provider<FileExporter>((_) => createFileExporter());
+
+final savePdfFileProvider =
+    Provider<Future<bool> Function(String, Uint8List)>((_) => savePdfFile);
 
 final filePickerProvider = Provider<FilePickerPort>((_) => createFilePicker());
 

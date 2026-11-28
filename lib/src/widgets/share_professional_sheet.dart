@@ -56,6 +56,7 @@ Future<String?> pickShareProfessional({
   required MalvaApiClient api,
   required String token,
   required bool Function() isCurrent,
+  VoidCallback? onEmpty,
 }) async {
   final (packages, links, sessions) = await (
     api.listCarePackages(accessToken: token),
@@ -70,10 +71,14 @@ Future<String?> pickShareProfessional({
     now: ServerClock.now(),
   );
   if (recipients.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content:
-          Text('Belum ada profesional dengan paket terhubung atau sesi aktif.'),
-    ));
+    if (onEmpty != null) {
+      onEmpty();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Belum ada profesional dengan paket terhubung atau sesi aktif.'),
+      ));
+    }
     return null;
   }
   return showModalBottomSheet<String>(

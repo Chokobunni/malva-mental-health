@@ -26,6 +26,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   List<BackendGoal> _serverGoals = const [];
   Set<String> _recordedGoals = {};
   final Map<String, String> _sessionIntents = {};
+  final _loggingGoals = <String>{};
   bool _loading = true, _mutating = false, _ownerChanged = false;
   String? _error;
   String _filter = 'all';
@@ -187,8 +188,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           .read(apiClientProvider)
           .listGoals(accessToken: token, includeInactive: true, on: date);
       if (!_current || generation != _loadRequest) return;
-      // Log presence controls off-schedule corrections, not access to the list.
-      setState(() => _serverGoals = goals);
+      if (_loggingGoals.isEmpty) setState(() => _serverGoals = goals);
       final logs = goals.any((g) => g.details?.method == 'checklist')
           ? await ref
               .read(apiClientProvider)
@@ -197,11 +197,12 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
       if (!_current || generation != _loadRequest || date != _selectedDate)
         return;
       setState(() {
-        _serverGoals = goals;
-        _recordedGoals = logs
-            .where((log) => log.loggedOn == date)
-            .map((log) => log.goalId)
-            .toSet();
+        if (_loggingGoals.isEmpty) {
+          _recordedGoals = {
+            for (final log in logs)
+              if (log.loggedOn == date) log.goalId,
+          };
+        }
         _loading = false;
       });
     } on Object catch (e) {
@@ -274,7 +275,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
     ref.listen<int>(clinicalDataRevisionProvider, (_, __) {
-      if (!_mutating) unawaited(_refresh());
+      if (!_mutating && _loggingGoals.isEmpty) unawaited(_refresh());
     });
     if (!_current)
       return const Scaffold(
@@ -365,8 +366,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                         ])),
                                     const SizedBox(width: 8),
                                     TextButton.icon(
-                                        onPressed:
-                                            _mutating ? null : () => _edit(),
+                                        onPressed: (_mutating ||
+                                                _loggingGoals.isNotEmpty)
+                                            ? null
+                                            : () => _edit(),
                                         style: TextButton.styleFrom(
                                             foregroundColor: Colors.white,
                                             backgroundColor: Colors.white
@@ -581,7 +584,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                               'Tambah Target / Kebiasaan Baru',
                                               icon: Icons.add_circle_outline,
                                               primary: true,
-                                              onPressed: _mutating
+                                              onPressed: (_mutating ||
+                                                      _loggingGoals.isNotEmpty)
                                                   ? null
                                                   : () => _edit()),
                                           const SizedBox(height: 6),
@@ -617,7 +621,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(spacing: 10, runSpacing: 8, children: [
             InkWell(
-                onTap: _mutating ? null : _selectDate,
+                onTap:
+                    _mutating || _loggingGoals.isNotEmpty ? null : _selectDate,
                 child: GoalPill(
                     '${const [
                       'Senin',
@@ -764,7 +769,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   Widget _archiveScreen(List<BackendGoal> goals) {
     final archived = goals.where((goal) => !goal.isActive).toList();
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F6FB),
+      backgroundColor: goalPaper,
       appBar: AppBar(
           title: const Text('Target diarsipkan',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22)),
@@ -781,9 +786,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
           children: [
-            if (_loading)
+            if (_loading && archived.isEmpty)
               const Center(child: CircularProgressIndicator(color: goalPurple))
-            else if (_error != null)
+            else if (_error != null && archived.isEmpty)
               TextButton(onPressed: _load, child: Text('$_error. Coba lagi'))
             else if (archived.isEmpty)
               Padding(
@@ -800,12 +805,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
               )
             else
               for (final goal in archived)
-                Card(
-                    child: ListTile(
-                        title: Text(goal.title),
-                        subtitle: Text(
-                            goalMethodLabel(goal.details?.method ?? 'yes_no')),
-                        trailing: _goalMenu(goal))),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: _card(goal, inArchive: true),
+                ),
           ],
         ),
       ),
@@ -813,7 +816,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   }
 
   Widget _goalMenu(BackendGoal goal) => PopupMenuButton<String>(
-        enabled: !_mutating,
+        enabled: !_mutating && _loggingGoals.isEmpty,
         tooltip: 'Opsi goal',
         icon: const Icon(Icons.more_vert, size: 19, color: goalMuted),
         color: Colors.white,
@@ -863,7 +866,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
       );
 
   Future<void> _setArchived(BackendGoal goal) async {
-    if (!_current || _mutating || !_server) return;
+    if (!_current || _mutating || _loggingGoals.isNotEmpty || !_server) return;
     setState(() => _mutating = true);
     try {
       final session = ref.read(currentSessionProvider)!;
@@ -890,10 +893,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     }
   }
 
-  Widget _card(BackendGoal goal) {
+  Widget _card(BackendGoal goal, {bool inArchive = false}) {
     final method = goal.details?.method ?? 'yes_no';
     final done = _done(goal);
     final configured = goal.details;
+    final complete = method == 'numeric' && configured != null
+        ? goal.todayValue >= configured.target
+        : done;
     final dateLocked = _selectedDate.compareTo(_today) > 0 ||
         (configured != null &&
             _selectedDate.compareTo(configured.startDate) < 0) ||
@@ -902,6 +908,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                     widget.now().subtract(const Duration(days: 1)))) <
                 0);
     final locked = _mutating ||
+        _loggingGoals.contains(goal.id) ||
         !goal.isActive ||
         dateLocked ||
         (!goal.isDue &&
@@ -918,8 +925,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             : const Color(0xFFF4EBF7);
     return GoalSurface(
         key: ValueKey(goal.id),
-        color: done ? const Color(0xFFFCF8FF) : Colors.white,
-        border: done ? const Color(0xFFD4BADF) : goalLine,
+        color: complete && !inArchive ? const Color(0xFFFCF8FF) : Colors.white,
+        border: complete && !inArchive ? const Color(0xFFD4BADF) : goalLine,
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
@@ -946,14 +953,16 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                     background: const Color(0xFFFFF9E5),
                     fontSize: 10,
                     verticalPadding: 3),
-              if (!goal.isActive) const GoalPill('Nonaktif'),
+              if (!goal.isActive && !inArchive) const GoalPill('Nonaktif'),
             ])),
             SizedBox(
                 width: 32,
                 height: 22,
                 child: IconButton(
                     tooltip: 'Edit goal',
-                    onPressed: _mutating ? null : () => _edit(goal),
+                    onPressed: (_mutating || _loggingGoals.isNotEmpty)
+                        ? null
+                        : () => _edit(goal),
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.edit_outlined,
                         size: 17, color: goalMuted))),
@@ -966,9 +975,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 height: 1.3,
-                color: done ? goalMuted : goalInk,
-                decoration: done ? TextDecoration.lineThrough : null,
-                decorationThickness: done ? 1.5 : null,
+                color: complete ? goalMuted : goalInk,
+                decoration: complete ? TextDecoration.lineThrough : null,
+                decorationThickness: complete ? 1.5 : null,
               )),
           if ((configured?.note ?? '').isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1195,7 +1204,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     final details = goal.details;
     if (details?.recurrence == 'weekly' && details?.weeklyTarget == null) {
       final selected = DateTime.parse(_selectedDate);
-      final scheduledDays = details!.scheduledWeekdaysInWeek(selected);
+      final scheduledDays = details!.weekdays.toSet();
       return Column(children: [
         Row(children: [
           Expanded(
@@ -1415,12 +1424,12 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
       int? value,
       List<String>? steps,
       String? sessionAction}) async {
-    if (!_current || _mutating) return;
+    if (!_current || _mutating || _loggingGoals.contains(goal.id)) return;
     // Logs retain historical IDs after a definition edit. Only current steps
     // may be submitted again, including when a historical-date reload failed.
     final currentIds = goal.details?.steps.map((step) => step.id).toSet() ?? {};
     steps = steps?.where(currentIds.contains).toSet().toList();
-    setState(() => _mutating = true);
+    setState(() => _loggingGoals.add(goal.id));
     try {
       if (_server) {
         final token = ref.read(currentSessionProvider)!.accessToken!;
@@ -1461,7 +1470,6 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                         selectedDate: date, sessionAction: sessionAction));
           }
           ref.read(clinicalDataRevisionProvider.notifier).state++;
-          await _load();
         }
       } else {
         final local = ref
@@ -1520,12 +1528,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     } on Object catch (e) {
       if (_current) _showError(e);
     } finally {
-      if (mounted) setState(() => _mutating = false);
+      if (mounted) setState(() => _loggingGoals.remove(goal.id));
+      if (_current && _server && _loggingGoals.isEmpty) await _load();
     }
   }
 
   Future<void> _edit([BackendGoal? goal]) async {
-    if (!_current || _mutating) return;
+    if (!_current || _mutating || _loggingGoals.isNotEmpty) return;
     final useServer = _server;
     final createKey = 'patient_goal_${wibNow().microsecondsSinceEpoch}';
     await Navigator.of(context).push<void>(MaterialPageRoute(
@@ -1539,7 +1548,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
               return GoalEditor(
                   goal: goal,
                   onSave: (result) async {
-                    if (!_current || _mutating) return false;
+                    if (!_current || _mutating || _loggingGoals.isNotEmpty)
+                      return false;
                     setState(() => _mutating = true);
                     try {
                       if (useServer) {
@@ -1624,7 +1634,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   }
 
   Future<void> _delete(BackendGoal goal) async {
-    if (!_current || _mutating) return;
+    if (!_current || _mutating || _loggingGoals.isNotEmpty) return;
     setState(() => _mutating = true);
     try {
       final confirm = await showDialog<bool>(

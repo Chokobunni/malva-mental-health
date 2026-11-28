@@ -16,6 +16,9 @@ SecureStore createSecureStore() => const FlutterSecureStore();
 
 FileExporter createFileExporter() => const ShareFileExporter();
 
+Future<bool> savePdfFile(String filename, Uint8List bytes) =>
+    savePdfWithPicker(filename, bytes);
+
 FilePickerPort createFilePicker() => ImagePickerAdapter();
 
 ReminderScheduler createReminderScheduler() =>

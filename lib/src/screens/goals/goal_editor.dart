@@ -24,6 +24,7 @@ class _GoalEditorState extends State<GoalEditor> {
   final _title = TextEditingController();
   final _note = TextEditingController();
   final _step = TextEditingController();
+  final _stepEntry = GlobalKey();
   final _unit = TextEditingController();
   final _target = TextEditingController();
   late String _method, _date, _time, _recurrence;
@@ -113,7 +114,7 @@ class _GoalEditorState extends State<GoalEditor> {
       return;
     }
     // The pending step is explicit input and must not disappear on Save.
-    if (_step.text.trim().isNotEmpty) _addStep();
+    if (_step.text.trim().isNotEmpty) _addStep(keepVisible: false);
     final target = int.tryParse(_target.text);
     if (_method == 'numeric' &&
         (target == null || target < 1 || target > 1000000)) {
@@ -145,7 +146,7 @@ class _GoalEditorState extends State<GoalEditor> {
     }
   }
 
-  void _addStep() {
+  void _addStep({bool keepVisible = true}) {
     final text = _step.text.trim();
     if (text.isEmpty || _steps.length >= 100) return;
     setState(() {
@@ -154,6 +155,15 @@ class _GoalEditorState extends State<GoalEditor> {
           label: text));
       _step.clear();
     });
+    if (keepVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final entry = _stepEntry.currentContext;
+        if (entry != null) {
+          Scrollable.ensureVisible(entry,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+        }
+      });
+    }
   }
 
   Widget _section(String title, String tag) => Padding(
@@ -517,6 +527,7 @@ class _GoalEditorState extends State<GoalEditor> {
                                                     const SizedBox(height: 8),
                                                   ],
                                                   GoalSurface(
+                                                      key: _stepEntry,
                                                       padding: const EdgeInsets
                                                           .symmetric(
                                                           horizontal: 14,
@@ -542,8 +553,8 @@ class _GoalEditorState extends State<GoalEditor> {
                                                                         'PlusJakartaSans',
                                                                     fontSize:
                                                                         13),
-                                                                onSubmitted: (_) =>
-                                                                    _addStep(),
+                                                                onEditingComplete:
+                                                                    _addStep,
                                                                 decoration: const InputDecoration(
                                                                     isDense:
                                                                         true,

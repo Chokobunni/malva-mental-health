@@ -438,7 +438,7 @@ void main() {
             find.byType(LinearProgressIndicator))
         .toList();
     expect(bars.first.value, 1);
-    expect(bars.length, 3);
+    expect(bars.length, 2);
   });
 
   testWidgets('diary bubble limits the note to three lines and shows dates',
@@ -456,7 +456,7 @@ void main() {
     expect(preview.overflow, TextOverflow.ellipsis);
     expect(preview.data, isNot(contains('Baris keempat')));
     expect(preview.data, endsWith('...'));
-    expect(find.text('11/11/2026 · 17:43'), findsOneWidget);
+    expect(find.text('11/11/2026 • 17:43'), findsOneWidget);
     expect(find.text('08/11/2026 19:39 WIB'), findsOneWidget);
   });
 

@@ -147,6 +147,13 @@ void main() {
     expect(answers[8].safety, isTrue);
     await show(tester, 'screening', answers);
     expect(find.text('Minat atau rasa senang menurun'), findsOneWidget);
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    expect(find.text('Minat atau rasa senang menurun'), findsNothing);
+    expect(find.text('Merasa gugup, cemas, atau tegang'), findsOneWidget);
+    await tester.tap(find.text('PHQ-9 Depresi (9)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Minat atau rasa senang menurun'), findsOneWidget);
     await tester.tap(find.text('GAD-7 Kecemasan (7)'));
     await tester.pumpAndSettle();
     expect(find.text('Merasa gugup, cemas, atau tegang'), findsOneWidget);

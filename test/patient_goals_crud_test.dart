@@ -135,6 +135,18 @@ void main() {
         {'id': 'log-a', 'goal_id': 'goal-a', 'logged_on': date, 'done': true},
         {'id': 'log-b', 'goal_id': 'goal-b', 'logged_on': date, 'done': false},
       ]);
+    server.goals.first['details'] = {
+      'method': 'numeric',
+      'target': 2000,
+      'unit': 'step',
+      'start_date': '2026-01-01',
+      'recurrence': 'weekly',
+      'weekdays': [1, 2],
+      'note': 'Di luar ruangan',
+      'steps': [
+        {'id': 'a', 'label': 'Siapkan sepatu'}
+      ],
+    };
     await _open(tester, server);
     await _tap(tester, find.byTooltip('Opsi goal').first);
     await _tap(tester, find.text('Arsipkan'));
@@ -153,6 +165,16 @@ void main() {
     await _tap(tester, find.text('Tutup'));
     await _tap(tester, find.text('Target diarsipkan'));
     expect(find.text('Jalan pagi'), findsOneWidget);
+    expect(find.text('Di luar ruangan'), findsOneWidget);
+    expect(find.text('Siapkan sepatu'), findsOneWidget);
+    expect(find.text('Hari terpilih (2×/minggu)'), findsOneWidget);
+    expect(find.text('Progres: 0 / 2000 step', findRichText: true),
+        findsOneWidget);
+    final add = find.byWidgetPredicate((widget) =>
+        widget is IconButton && widget.tooltip == 'Tambah progres Jalan pagi');
+    expect(tester.widget<IconButton>(add).onPressed, isNull);
+    await _tap(tester, find.byTooltip('Opsi goal'));
+    expect(find.text('Aktifkan kembali'), findsOneWidget);
   });
 
   testWidgets('failed card delete preserves goal and permits retry',

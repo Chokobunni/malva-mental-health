@@ -1,6 +1,8 @@
 // Implementasi port untuk Flutter web. Berkas ini HANYA dikompilasi saat
 // `flutter build web --target=lib/main_web.dart` (dipilih lewat
 // `dart.library.js_interop` di platform_factory.dart).
+import 'dart:typed_data';
+
 import 'contracts/ports.dart';
 import 'web/browser_history_web.dart';
 import 'web/dialer_web.dart';
@@ -16,6 +18,12 @@ import 'web/web_capabilities.dart';
 SecureStore createSecureStore() => const FlutterSecureStoreWeb();
 
 FileExporter createFileExporter() => const BrowserFileExporter();
+
+Future<bool> savePdfFile(String filename, Uint8List bytes) async {
+  await const BrowserFileExporter()
+      .saveBytes(filename: filename, bytes: bytes, mimeType: 'application/pdf');
+  return true;
+}
 
 FilePickerPort createFilePicker() => ImagePickerAdapterWeb();
 
