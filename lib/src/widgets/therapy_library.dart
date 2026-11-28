@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ai/assessment_interpretation.dart';
 import '../ai/assessment_scoring.dart';
 import 'score_meaning.dart';
-import '../models.dart' show AuthSession;
+import '../models.dart' show AuthSession, UserRole;
 import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
@@ -1301,7 +1301,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     final color = module.color ?? MalvaColors.mint;
     final running = _breathingTimer != null;
     return SoftCard(
-      color: color.withValues(alpha: 0.07),
+      color: Colors.white,
       child: Row(
         children: [
           AnimatedScale(
@@ -3135,42 +3135,6 @@ class _TherapySubmissionsScreenState
     }
   }
 
-  Future<void> _share(BackendTherapySubmission submission) async {
-    final session = ref.read(currentSessionProvider);
-    final token = session?.accessToken;
-    if (token == null || token.isEmpty) return;
-    try {
-      final chosen = await pickShareProfessional(
-        context: context,
-        api: ref.read(apiClientProvider),
-        token: token,
-        isCurrent: () => mounted && _isOwner,
-      );
-      if (chosen == null || !mounted || !_isOwner) return;
-      await ref.read(apiClientProvider).shareTherapySubmission(
-            accessToken: token,
-            submissionId: submission.id,
-            professionalId: chosen,
-          );
-      if (!mounted || !_isOwner) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lembar Kerja dibagikan ke profesional.'),
-          backgroundColor: MalvaColors.mint,
-        ),
-      );
-      if (mounted && _isOwner)
-        ref.read(_therapyHistoryRevision.notifier).state++;
-    } on Object catch (e) {
-      if (!mounted || !_isOwner) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
-  }
-
   Future<void> _delete(BackendTherapySubmission submission) async {
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
@@ -3205,102 +3169,106 @@ class _TherapySubmissionsScreenState
             item.title.toLowerCase().contains(_query.toLowerCase().trim()))
         .toList();
     return Scaffold(
-      backgroundColor: const Color(0xfffaf7fc),
-      appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(150),
-          child: Container(
-            decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                    colors: [Color(0xff9334ac), Color(0xff652078)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight),
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(26))),
-            child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 19),
-                  child: Column(children: [
-                    Row(children: [
-                      IconButton(
-                          style: IconButton.styleFrom(
-                              backgroundColor:
-                                  Colors.white.withValues(alpha: .12)),
-                          onPressed: () => Navigator.maybePop(context),
-                          icon: const Icon(Icons.arrow_back_rounded,
-                              color: Colors.white)),
-                      const Expanded(
-                          child: Center(
-                              child: Text('Riwayat Terapi',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800)))),
-                      IconButton(
-                          tooltip: 'Muat ulang',
-                          onPressed: _isLoading ? null : _load,
-                          style: IconButton.styleFrom(
-                              backgroundColor:
-                                  Colors.white.withValues(alpha: .12)),
-                          icon: const Icon(Icons.refresh_rounded,
-                              color: Colors.white)),
-                    ]),
-                    const SizedBox(height: 12),
-                    TextField(
-                        onChanged: (value) => setState(() => _query = value),
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Cari sesi terapi...',
-                          hintStyle: TextStyle(
-                              color: Colors.white.withValues(alpha: .55)),
-                          filled: true,
-                          fillColor: Colors.white.withValues(alpha: .17),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 13),
-                          enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                  color: Colors.white.withValues(alpha: .2))),
-                          focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide:
-                                  const BorderSide(color: Colors.white70)),
-                        )),
-                  ]),
-                )),
-          )),
+      backgroundColor: const Color(0xfff7f5fa),
       body: Column(children: [
-        Padding(
-            padding: const EdgeInsets.fromLTRB(18, 15, 18, 13),
-            child: Row(children: [
-              for (final filter in [
-                ('all', 'Semua (${all.length})'),
-                ('saved', 'Tersimpan'),
-                ('shared', 'Dibagikan')
-              ]) ...[
-                if (filter.$1 != 'all') const SizedBox(width: 7),
-                Expanded(
-                    child: ChoiceChip(
-                  label:
-                      FittedBox(fit: BoxFit.scaleDown, child: Text(filter.$2)),
-                  selected: _status == filter.$1,
-                  showCheckmark: false,
-                  labelStyle: TextStyle(
-                      color: _status == filter.$1
-                          ? Colors.white
-                          : const Color(0xff52606e),
-                      fontWeight: FontWeight.w700),
-                  selectedColor: const Color(0xff9234ad),
-                  backgroundColor: Colors.white,
-                  side: BorderSide(
-                      color: _status == filter.$1
-                          ? Colors.transparent
-                          : const Color(0xffe9e7ed)),
-                  shape: const StadiumBorder(),
-                  onSelected: (_) => setState(() => _status = filter.$1),
-                )),
+        Container(
+          decoration: const BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                    color: Color(0x24542f7c),
+                    blurRadius: 14,
+                    offset: Offset(0, 6))
               ],
-            ])),
+              gradient: LinearGradient(
+                  colors: [Color(0xff9334ac), Color(0xff652078)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(26))),
+          child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 19),
+                child: Column(children: [
+                  Row(children: [
+                    IconButton(
+                        style: IconButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: .12)),
+                        onPressed: () => Navigator.maybePop(context),
+                        icon: const Icon(Icons.arrow_back_rounded,
+                            color: Colors.white)),
+                    const Expanded(
+                        child: Center(
+                            child: Text('Riwayat Terapi',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800)))),
+                    IconButton(
+                        tooltip: 'Muat ulang',
+                        onPressed: _isLoading ? null : _load,
+                        style: IconButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: .12)),
+                        icon: const Icon(Icons.refresh_rounded,
+                            color: Colors.white)),
+                  ]),
+                  const SizedBox(height: 12),
+                  TextField(
+                      onChanged: (value) => setState(() => _query = value),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Cari sesi terapi...',
+                        hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: .55)),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: .17),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 34, vertical: 13),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                                color: Colors.white.withValues(alpha: .2))),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide:
+                                const BorderSide(color: Colors.white70)),
+                      )),
+                ]),
+              )),
+        ),
+        Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 19),
+            child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(spacing: 8, runSpacing: 4, children: [
+                  for (final filter in [
+                    ('all', 'Semua (${all.length})'),
+                    ('saved', 'Tersimpan'),
+                    ('shared', 'Dibagikan')
+                  ]) ...[
+                    ChoiceChip(
+                      label: Text(filter.$2),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 7),
+                      visualDensity: VisualDensity.compact,
+                      selected: _status == filter.$1,
+                      showCheckmark: false,
+                      labelStyle: TextStyle(
+                          color: _status == filter.$1
+                              ? Colors.white
+                              : const Color(0xff52606e),
+                          fontWeight: FontWeight.w700),
+                      selectedColor: const Color(0xff9234ad),
+                      backgroundColor: Colors.white,
+                      side: BorderSide(
+                          color: _status == filter.$1
+                              ? Colors.transparent
+                              : const Color(0xffe9e7ed)),
+                      shape: const StadiumBorder(),
+                      onSelected: (_) => setState(() => _status = filter.$1),
+                    ),
+                  ],
+                ]))),
         Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -3332,108 +3300,158 @@ class _TherapySubmissionsScreenState
 
   Widget _historyCard(BackendTherapySubmission item) {
     final at = item.createdDateTime;
+    final module = findTherapyModuleById(item.moduleId);
+    final (icon, color, tint) = switch (item.moduleId) {
+      'pmr' => (
+          Icons.accessibility_new_rounded,
+          const Color(0xff963bd0),
+          const Color(0xfffaf4fe)
+        ),
+      'breathing' => (
+          Icons.air_rounded,
+          const Color(0xff098e75),
+          const Color(0xffe9faf4)
+        ),
+      'tipp' => (
+          Icons.monitor_heart_outlined,
+          const Color(0xff963bd0),
+          const Color(0xfffaf4fe)
+        ),
+      _ => (
+          Icons.self_improvement_rounded,
+          module?.color ?? MalvaColors.plum,
+          const Color(0xfffaf4fe)
+        ),
+    };
+    final statusColor =
+        item.isShared ? const Color(0xff178a70) : const Color(0xffb8731b);
+    final radius = BorderRadius.circular(17);
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(19),
-          border: Border.all(color: const Color(0xfff1eaf6))),
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: const [
+        BoxShadow(
+            color: Color(0x0c542f7c), blurRadius: 16, offset: Offset(0, 5)),
+      ]),
       child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(19),
-            onTap: () => showTherapyRecordDetail(context, item),
-            child: Padding(
-                padding: const EdgeInsets.all(15),
-                child: Column(children: [
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    TherapyModuleIcon(
-                        module: findTherapyModuleById(item.moduleId), size: 40),
-                    const SizedBox(width: 10),
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: const BorderSide(color: Color(0xfff1eaf6)),
+        ),
+        child: InkWell(
+          borderRadius: radius,
+          onTap: () =>
+              showTherapyRecordDetail(context, item, patientActions: true),
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(children: [
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: tint,
+                      foregroundColor: color,
+                      child: Icon(icon, size: 20),
+                    ),
+                    const SizedBox(width: 11),
                     Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(item.title,
                               style: const TextStyle(
                                   color: Color(0xff202a38),
                                   fontSize: 15,
+                                  height: 1.3,
                                   fontWeight: FontWeight.w800)),
-                          if (at != null)
-                            Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Row(children: [
-                                  const Icon(Icons.schedule_rounded,
-                                      color: Color(0xff98a4b2), size: 14),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                      child: Text(
-                                          '${formatWibDate(at)} • ${formatWibBubbleTime(at)}',
-                                          style: const TextStyle(
-                                              color: Color(0xff98a4b2),
-                                              fontSize: 11))),
-                                ])),
-                        ])),
-                    const SizedBox(width: 7),
-                    Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                            color: item.isShared
-                                ? const Color(0xffeafcf4)
-                                : const Color(0xfffffbea),
-                            border: Border.all(
-                                color: item.isShared
-                                    ? const Color(0xffc8edde)
-                                    : const Color(0xfff2e9bc)),
-                            borderRadius: BorderRadius.circular(20)),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(
-                              item.isShared
-                                  ? Icons.send_outlined
-                                  : Icons.folder_outlined,
-                              size: 12,
+                          if (at != null) ...[
+                            const SizedBox(height: 6),
+                            Row(children: [
+                              const Icon(Icons.schedule_rounded,
+                                  color: _recordMuted, size: 14),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                  child: Text(
+                                '${formatWibDate(at)} • ${formatWibBubbleTime(at)}',
+                                style: const TextStyle(
+                                    color: Color(0xff768697), fontSize: 11),
+                              )),
+                            ]),
+                          ],
+                          const SizedBox(height: 7),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 3),
+                            decoration: BoxDecoration(
                               color: item.isShared
-                                  ? const Color(0xff178a70)
-                                  : const Color(0xffbb851c)),
-                          const SizedBox(width: 4),
-                          Text(item.isShared ? 'Dibagikan' : 'Tersimpan',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                                  ? const Color(0xffeafcf4)
+                                  : const Color(0xfffffae8),
+                              border: Border.all(
                                   color: item.isShared
-                                      ? const Color(0xff178a70)
-                                      : const Color(0xffbb851c))),
-                        ])),
-                  ]),
-                  const Divider(height: 27, color: Color(0xfff0f2f5)),
-                  Row(children: [
-                    Expanded(
-                        child: TextButton.icon(
-                            style: TextButton.styleFrom(
-                                backgroundColor: const Color(0xfffaf5fe),
-                                foregroundColor: const Color(0xff903ea2),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12))),
-                            onPressed: () => _share(item),
-                            icon: const Icon(Icons.send_outlined, size: 17),
-                            label: const Text('Bagikan'))),
-                    const SizedBox(width: 9),
-                    OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xff697887),
-                            side: const BorderSide(color: Color(0xffe9edf0)),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12))),
-                        onPressed: () => _delete(item),
-                        icon:
-                            const Icon(Icons.delete_outline_rounded, size: 17),
-                        label: const Text('Hapus')),
-                  ]),
-                ])),
-          )),
+                                      ? const Color(0xffc8edde)
+                                      : const Color(0xfff3e8b6)),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child:
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(
+                                  item.isShared
+                                      ? Icons.send_outlined
+                                      : Icons.folder_outlined,
+                                  size: 12,
+                                  color: statusColor),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                  child: Text(
+                                      item.isShared ? 'Dibagikan' : 'Tersimpan',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: statusColor))),
+                            ]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 7),
+              IconButton.outlined(
+                tooltip: 'Edit',
+                onPressed: module == null
+                    ? null
+                    : () => _editTherapyRecord(context, item),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                style: _historyActionStyle,
+              ),
+              const SizedBox(width: 5),
+              IconButton.outlined(
+                tooltip: 'Hapus',
+                onPressed: () => _delete(item),
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                style: _historyActionStyle,
+              ),
+            ]),
+          ),
+        ),
+      ),
     );
   }
+
+  ButtonStyle get _historyActionStyle => IconButton.styleFrom(
+        foregroundColor: const Color(0xff435261),
+        backgroundColor: const Color(0xfffcfdfe),
+        minimumSize: const Size.square(34),
+        maximumSize: const Size.square(34),
+        padding: EdgeInsets.zero,
+        shape: const CircleBorder(),
+        side: const BorderSide(color: Color(0xffe5e9ef)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      );
 }
 
 /// Ringkasan therapy record terbaru untuk halaman Psychological Therapy.
@@ -3614,7 +3632,8 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
         for (final item in preview) ...[
           _TherapyRecordPreviewCard(
             item: item,
-            onTap: () => showTherapyRecordDetail(context, item),
+            onTap: () =>
+                showTherapyRecordDetail(context, item, patientActions: true),
             onEdit: findTherapyModuleById(item.moduleId) == null
                 ? null
                 : () => _editTherapyRecord(context, item),
@@ -3857,6 +3876,7 @@ class TherapySubmissionView extends StatelessWidget {
     this.isShared = true,
     this.standalone = false,
     this.createdAt,
+    this.patientSubmissionId,
   });
 
   final String moduleId;
@@ -3868,12 +3888,14 @@ class TherapySubmissionView extends StatelessWidget {
   final bool isShared;
   final bool standalone;
   final DateTime? createdAt;
+  final String? patientSubmissionId;
 
   @override
   Widget build(BuildContext context) {
     final module = findTherapyModuleById(moduleId);
     if (standalone && module?.isAssessment != true) {
-      return _TherapySubmissionSheet(view: this);
+      return _TherapySubmissionSheet(
+          view: this, patientSubmissionId: patientSubmissionId);
     }
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
@@ -3959,14 +3981,17 @@ class TherapySubmissionView extends StatelessWidget {
 }
 
 Future<void> showTherapyRecordDetail(
-        BuildContext context, BackendTherapySubmission record) =>
+        BuildContext context, BackendTherapySubmission record,
+        {bool patientActions = false}) =>
     showTherapySubmissionDetail(context,
         moduleId: record.moduleId,
         title: record.title,
         answers: record.answers,
         summary: record.summary,
         createdAt: record.createdDateTime,
-        isShared: record.isShared);
+        isShared: record.isShared,
+        patientSubmissionId:
+            patientActions && record.id.isNotEmpty ? record.id : null);
 
 Future<void> showTherapySubmissionDetail(
   BuildContext context, {
@@ -3976,8 +4001,9 @@ Future<void> showTherapySubmissionDetail(
   String summary = '',
   DateTime? createdAt,
   bool isShared = true,
+  String? patientSubmissionId,
 }) {
-  (Object?, String?) ownerKey(AuthSession? session) =>
+  (UserRole?, String?) ownerKey(AuthSession? session) =>
       (session?.role, session?.backendUserId ?? session?.identifier);
   final owner = ownerKey(ProviderScope.containerOf(context, listen: false)
       .read(currentSessionProvider));
@@ -4013,11 +4039,15 @@ Future<void> showTherapySubmissionDetail(
                     createdAt: createdAt,
                     isShared: isShared,
                     standalone: true,
-                    initiallyExpanded: true);
-                return findTherapyModuleById(moduleId)?.isAssessment == true
-                    ? SingleChildScrollView(
-                        padding: const EdgeInsets.all(20), child: view)
-                    : view;
+                    initiallyExpanded: true,
+                    patientSubmissionId: owner.$1 == UserRole.patient
+                        ? patientSubmissionId
+                        : null);
+                if (findTherapyModuleById(moduleId)?.isAssessment == true) {
+                  return SingleChildScrollView(
+                      padding: const EdgeInsets.all(20), child: view);
+                }
+                return view;
               }),
             ),
           ));

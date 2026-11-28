@@ -356,8 +356,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
           {String? subtitle,
           Color color = _purple,
           bool compact = false,
-          double rotation = 0,
-          Widget? trailing}) =>
+          double rotation = 0}) =>
       Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(children: [
@@ -378,7 +377,6 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                           style: TextStyle(
                               color: _muted, fontSize: compact ? 10 : 11)),
                   ])),
-              if (trailing != null) trailing,
             ]),
             if (subtitle != null) ...[
               const SizedBox(height: 10),
@@ -456,18 +454,14 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
 
   List<Widget> _goals() {
     final goals = _maps(_meta['goals'] ?? _meta['habits']);
-    const colors = [
-      Color(0xff7a3de0),
-      Color(0xffa482d4),
-      Color(0xffd68a10),
-      Color(0xff12a7b5)
-    ];
     return [
-      _heading('Progres Target & Kebiasaan', Icons.flag_outlined,
+      _recordHeading('Progres Target & Kebiasaan', CupertinoIcons.flag,
           subtitle: 'Pembaruan Target Mingguan'),
+      if (goals.isNotEmpty) const SizedBox(height: 17),
       for (final (index, goal) in goals.indexed) ...[
-        if (index > 0) const Divider(height: 19, color: Color(0xffe8def0)),
-        _goalProgress(goal, colors[index % colors.length]),
+        Divider(height: index == 0 ? 1 : 32, color: const Color(0xffedf0f2)),
+        if (index == 0) const SizedBox(height: 16),
+        _goalProgress(goal),
       ],
       if (goals.isEmpty)
         const Text('Target belum tersedia',
@@ -475,7 +469,59 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     ];
   }
 
-  Widget _goalProgress(Map goal, Color color) {
+  Widget _recordHeading(String title, IconData icon,
+      {String? subtitle, bool diary = false}) {
+    final accent = diary ? const Color(0xffab812d) : const Color(0xff792a91);
+    final tint = diary ? const Color(0xfffbf5e7) : const Color(0xfff5ebfa);
+    return Row(children: [
+      Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+              color: tint,
+              border: Border.all(
+                  color: diary
+                      ? const Color(0xfff2e6b0)
+                      : const Color(0xffe8d9ed)),
+              borderRadius: BorderRadius.circular(11)),
+          child: Icon(icon, color: accent, size: 21)),
+      const SizedBox(width: 11),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 15,
+                  color: Color(0xff202b39),
+                  fontWeight: FontWeight.w800)),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(subtitle,
+                style: const TextStyle(color: Color(0xff687586), fontSize: 12)),
+          ],
+        ]),
+      ),
+      if (diary)
+        const Icon(Icons.chevron_right_rounded, color: MalvaColors.plum),
+    ]);
+  }
+
+  Widget _recordTime({bool includeDate = false}) {
+    final sent = widget.message.timestamp;
+    return Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+      Text(
+          includeDate
+              ? '${formatWibDate(sent)} • ${formatWibBubbleTime(sent)}'
+              : formatWibBubbleTime(sent),
+          style: const TextStyle(color: Color(0xff8492a2), fontSize: 11)),
+      if (widget.message.isMine && widget.message.id.isNotEmpty) ...[
+        const SizedBox(width: 4),
+        const Icon(Icons.check_rounded,
+            size: 13, color: Color(0xff792a91), semanticLabel: 'Terkirim'),
+      ],
+    ]);
+  }
+
+  Widget _goalProgress(Map goal) {
     final done = _number(goal['done_this_week'], integer: true);
     final target = _number(goal['target_per_week'], integer: true);
     final value = _number(goal['today_value'], integer: true);
@@ -495,6 +541,9 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     final progress = numeric
         ? (value == null ? null : value / dailyTarget)
         : (done != null && target != null && target > 0 ? done / target : null);
+    final hasProgress = progress != null && progress > 0;
+    final color =
+        hasProgress ? const Color(0xff118980) : const Color(0xff792a91);
     final details = [
       if (numeric && value != null)
         '${_numeric(value)}/${_numeric(dailyTarget)} ${_text(goal, 'unit')}'
@@ -509,13 +558,15 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
         Expanded(
             child: Text(_text(goal, 'title', 'Target'),
                 style: const TextStyle(
-                    color: _ink, fontWeight: FontWeight.w800, fontSize: 13))),
+                    color: Color(0xff202b39),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14))),
         if (!numeric && target != null && target > 0) ...[
           const SizedBox(width: 7),
           Text('${_numeric(done)}/${_numeric(target)}',
               style: TextStyle(
-                  color: done != null && done > 0 ? color : _muted,
-                  fontSize: 12,
+                  color: hasProgress ? color : const Color(0xff687586),
+                  fontSize: 13,
                   fontWeight: FontWeight.w700)),
         ] else if (!numeric &&
             goal['flexible_weekly_target'] == true &&
@@ -526,9 +577,12 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                   color: _muted, fontSize: 12, fontWeight: FontWeight.w700)),
         ],
       ]),
-      if (details.isNotEmpty)
+      if (details.isNotEmpty) ...[
+        const SizedBox(height: 5),
         Text(details.join(' • '),
-            style: const TextStyle(color: _muted, fontSize: 11)),
+            style: const TextStyle(
+                color: Color(0xff687586), fontSize: 12, height: 1.4)),
+      ],
       if (checklist && tasks.isNotEmpty)
         _goalDetail(
           'Daftar Langkah',
@@ -537,14 +591,16 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
               .map((step) => (_text(step, 'label'), step['done'] == true))
               .toList(),
         ),
-      if (progress != null) ...[
-        const SizedBox(height: 6),
+      if (progress != null && !checklist) ...[
+        const SizedBox(height: 8),
         LinearProgressIndicator(
             value: progress.clamp(0.0, 1.0).toDouble(),
             minHeight: 6,
             color: color,
             borderRadius: BorderRadius.circular(6),
-            backgroundColor: const Color(0xffecdef7)),
+            backgroundColor: hasProgress
+                ? const Color(0xffc9f7ef)
+                : const Color(0xfff0e5f8)),
       ],
       if (!checklist && activities.isNotEmpty)
         _goalDetail('Rincian Aktivitas', null,
@@ -554,11 +610,12 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
 
   Widget _goalDetail(String title, String? count, List<(String, bool?)> rows) =>
       Container(
-        margin: const EdgeInsets.only(top: 7),
-        padding: const EdgeInsets.all(9),
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.all(13),
         decoration: BoxDecoration(
-            color: const Color(0xfff0e6f8),
-            borderRadius: BorderRadius.circular(9)),
+            color: const Color(0xfff8f3fb),
+            border: Border.all(color: const Color(0xffe8dbec)),
+            borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
@@ -572,11 +629,11 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       color: _purple,
-                      fontSize: 11)),
+                      fontSize: 12)),
           ]),
           for (final (label, done) in rows)
             Padding(
-                padding: const EdgeInsets.only(top: 5),
+                padding: const EdgeInsets.only(top: 9),
                 child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -586,13 +643,15 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                               : done
                                   ? Icons.check_box_rounded
                                   : Icons.check_box_outline_blank_rounded,
-                          color: _purple,
+                          color: done == false
+                              ? const Color(0xff707479)
+                              : const Color(0xff812b98),
                           size: done == null ? 6 : 15),
                       const SizedBox(width: 8),
                       Expanded(
                           child: Text(label,
                               style:
-                                  const TextStyle(color: _ink, fontSize: 11))),
+                                  const TextStyle(color: _ink, fontSize: 12))),
                     ])),
         ]),
       );
@@ -1030,24 +1089,26 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
             case final item?)
           item,
     ];
-    final sent = widget.message.timestamp;
     return [
-      _heading('Jurnal', Icons.menu_book_outlined,
-          color: const Color(0xFFC69F49),
-          trailing:
-              const Icon(Icons.chevron_right_rounded, color: MalvaColors.plum)),
+      _recordHeading('Jurnal', CupertinoIcons.book, diary: true),
+      const SizedBox(height: 12),
       if (_text(data, 'title').isNotEmpty)
         Text(_text(data, 'title'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-                color: _ink, fontSize: 16, fontWeight: FontWeight.w800)),
+                color: Color(0xff111927),
+                fontSize: 16,
+                fontWeight: FontWeight.w800)),
       if (at != null)
-        Text('${formatWibDateTime(at)} WIB',
-            style: const TextStyle(color: Color(0xff625a6b), fontSize: 11)),
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text('${formatWibDateTime(at)} WIB',
+              style: const TextStyle(color: Color(0xff8492a2), fontSize: 12)),
+        ),
       if (preview.isNotEmpty)
         Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: 14),
             child: Text(preview,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
@@ -1055,24 +1116,33 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                     const TextStyle(color: _ink, fontSize: 14, height: 1.45))),
       if (previews.isNotEmpty)
         Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Wrap(spacing: 10, runSpacing: 6, children: [
+            padding: const EdgeInsets.only(top: 14),
+            child: Wrap(spacing: 14, runSpacing: 8, children: [
               for (final media in previews)
                 DiaryMediaTile(
                     media: media,
                     api: ref.watch(apiClientProvider),
                     token: ref.watch(currentSessionProvider)?.accessToken,
-                    size: 68),
+                    size: 72),
             ])),
-      const SizedBox(height: 8),
-      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Expanded(
-            child:
-                DiaryTags(tags: content.tags.take(3).toList(growable: false))),
-        const SizedBox(width: 6),
-        Text('${formatWibDate(sent)} · ${formatWibBubbleTime(sent)}',
-            style: const TextStyle(color: Color(0xff625a6b), fontSize: 10)),
-      ]),
+      if (content.tags.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          for (final tag in content.tags.take(3))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xfff8f3fb),
+                border: Border.all(color: const Color(0xffe8dbec)),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Text('#$tag',
+                  style: const TextStyle(fontSize: 11, color: _ink)),
+            ),
+        ]),
+      ],
+      const SizedBox(height: 14),
+      _recordTime(includeDate: true),
     ];
   }
 
@@ -1084,6 +1154,19 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     final assessment =
         const {'assessment', 'screening'}.contains(widget.message.kind) ||
             widget.message.kind == 'worksheet' && _isAssessmentModule;
+    final diary = widget.message.kind == 'diary';
+    final goals = const {'goals', 'habits'}.contains(widget.message.kind);
+    final referenceCard = diary || goals;
+    final white = referenceCard ||
+        assessment ||
+        const {'prescription', 'medication'}.contains(widget.message.kind);
+    final borderRadius = referenceCard && widget.message.isMine
+        ? const BorderRadius.only(
+            topLeft: Radius.circular(17),
+            topRight: Radius.circular(2),
+            bottomLeft: Radius.circular(17),
+            bottomRight: Radius.circular(17))
+        : BorderRadius.circular(18);
     final content = switch (widget.message.kind) {
       'summary' || 'progress' => _summary(),
       'goals' || 'habits' => _goals(),
@@ -1093,34 +1176,26 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
       _ => <Widget>[Text(widget.message.text)],
     };
     return Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(referenceCard ? 16 : 14),
         decoration: BoxDecoration(
-            color: (assessment ||
-                    const {'prescription', 'medication'}
-                        .contains(widget.message.kind))
-                ? Colors.white
-                : const Color(0xFFF8F1FC),
-            boxShadow: widget.message.kind == 'diary' ? careSoftShadow : null,
-            borderRadius: BorderRadius.circular(18),
+            color: white ? Colors.white : const Color(0xFFF8F1FC),
+            boxShadow: referenceCard ? careSoftShadow : null,
+            borderRadius: borderRadius,
             border: Border.all(
-                color: (assessment ||
-                        const {'prescription', 'medication'}
-                            .contains(widget.message.kind))
-                    ? const Color(0xFFDCCBE4)
-                    : const Color(0xFFEDE4F7),
-                width: (assessment ||
-                        const {'prescription', 'medication'}
-                            .contains(widget.message.kind))
-                    ? 1.5
-                    : 1)),
+                color:
+                    white ? const Color(0xFFDCCBE4) : const Color(0xFFEDE4F7),
+                width: white ? 1.5 : 1)),
         child: InkWell(
             onTap: widget.onOpenDiary ?? (record ? widget.onOpenRecord : null),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: borderRadius,
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ...content,
-                  if (!const {'prescription', 'medication', 'diary'}
+                  if (goals) ...[
+                    const SizedBox(height: 20),
+                    _recordTime(),
+                  ] else if (!const {'prescription', 'medication', 'diary'}
                       .contains(widget.message.kind)) ...[
                     SizedBox(
                         height: switch (widget.message.kind) {

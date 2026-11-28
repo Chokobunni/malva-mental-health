@@ -168,7 +168,7 @@ class DiaryImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = media.resolve(api.baseUri);
-    final radius = BorderRadius.circular(showLabel ? 18 : 10);
+    final radius = BorderRadius.circular(showLabel ? 18 : 14);
     final image = ClipRRect(
         borderRadius: radius,
         child: url == null || token == null || token!.isEmpty

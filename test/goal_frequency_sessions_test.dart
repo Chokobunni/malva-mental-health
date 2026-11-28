@@ -154,9 +154,20 @@ void main() {
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(find.text('1/5 sesi'), findsOneWidget);
-      if (method == 'numeric')
+      if (method == 'numeric') {
         expect(find.text('Progres: 1 / 7 halaman', findRichText: true),
             findsOneWidget);
+        TextDecoration? titleDecoration() =>
+            tester.widget<Text>(find.text('Membaca buku')).style?.decoration;
+        expect(titleDecoration(), isNull);
+        final add = find.byTooltip('Tambah progres Membaca buku');
+        for (var i = 2; i <= 8; i++) {
+          await tester.ensureVisible(add);
+          await tester.tap(add);
+          await tester.pumpAndSettle();
+          expect(titleDecoration(), i >= 7 ? TextDecoration.lineThrough : null);
+        }
+      }
       if (method == 'checklist')
         expect(find.text('1/2 selesai'), findsOneWidget);
       expect(actions, ['complete', 'complete', 'undo']);

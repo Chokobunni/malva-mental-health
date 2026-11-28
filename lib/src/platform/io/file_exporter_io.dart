@@ -1,10 +1,22 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../contracts/ports.dart';
+
+Future<bool> savePdfWithPicker(String filename, Uint8List bytes) async {
+  final saved = await FilePicker.platform.saveFile(
+    dialogTitle: 'Simpan Lembar Kerja',
+    fileName: filename,
+    type: FileType.custom,
+    allowedExtensions: const ['pdf'],
+    bytes: bytes,
+  );
+  return saved != null;
+}
 
 /// [FileExporter] mobile/desktop: tulis ke berkas temp lalu buka lembar
 /// bagikan Android (perilaku identik dengan `ExportService.shareCsv`).

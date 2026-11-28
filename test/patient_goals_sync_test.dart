@@ -36,7 +36,8 @@ Future<void> tap(WidgetTester t, Finder f) async {
   await t.pumpAndSettle();
 }
 
-Future<void> list(WidgetTester t, Map<String, dynamic> data) async {
+Future<void> list(WidgetTester t, Map<String, dynamic> data,
+    {DateTime Function()? now}) async {
   FlutterSecureStorage.setMockInitialValues({});
   final c = ProviderContainer(overrides: [
     apiClientProvider.overrideWithValue(MalvaApiClient(
@@ -59,7 +60,8 @@ Future<void> list(WidgetTester t, Map<String, dynamic> data) async {
       container: c,
       child: MaterialApp(
           theme: buildMalvaTheme(),
-          home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
+          home:
+              GoalsScreen(now: now ?? () => wibFromParts(2026, 11, 13, 12)))));
   await t.pumpAndSettle();
 }
 
@@ -74,7 +76,7 @@ Map<String, dynamic> record(Map<String, dynamic> details) => {
     };
 
 void main() {
-  testWidgets('checklist schedule shows effective weekdays above its steps',
+  testWidgets('checklist schedule shows configured weekdays above its steps',
       (t) async {
     size(t);
     t.view.physicalSize = const Size(320, 1100);
@@ -93,7 +95,7 @@ void main() {
       'done_today': true,
       'today_completed_step_ids': ['a', 'b']
     });
-    expect(find.text('Hari terpilih (3×/minggu)'), findsOneWidget);
+    expect(find.text('Hari terpilih (7×/minggu)'), findsOneWidget);
     expect(find.text('Selesai hari ini'), findsOneWidget);
     for (final day in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']) {
       expect(find.text(day), findsOneWidget);
@@ -102,8 +104,8 @@ void main() {
     expect(
         t.widget<Text>(find.text('Sab')).style!.color, const Color(0xFF9853A4));
     expect(
-        t.widget<Text>(find.text('Sen')).style!.color, const Color(0xFFC9CFD7));
-    expect(t.getTopLeft(find.text('Hari terpilih (3×/minggu)')).dy,
+        t.widget<Text>(find.text('Sen')).style!.color, const Color(0xFF9853A4));
+    expect(t.getTopLeft(find.text('Hari terpilih (7×/minggu)')).dy,
         lessThan(t.getTopLeft(find.text('Daftar Langkah')).dy));
     expect(find.byType(Checkbox), findsNWidgets(2));
     expect(find.text('Ya'), findsNothing);
@@ -327,22 +329,44 @@ void main() {
     });
   }
 
-  testWidgets(
-      'first weekly card counts Friday to Sunday rather than days before start',
-      (t) async {
-    size(t);
-    await list(
-        t,
-        record({
-          'method': 'yes_no',
-          'start_date': '2026-11-13',
-          'recurrence': 'weekly',
-          'interval': 1,
-          'weekdays': [1, 2, 3, 4, 5, 6, 7]
-        }));
-    expect(find.text('Hari terpilih (3×/minggu)'), findsOneWidget);
-    expect(find.text('Hari terpilih (7×/minggu)'), findsNothing);
-  });
+  for (final weekdays in [
+    [1, 2],
+    [5, 6, 7]
+  ]) {
+    testWidgets('first weekly card retains the configured weekdays $weekdays',
+        (t) async {
+      size(t);
+      await list(
+          t,
+          {
+            ...record({
+              'method': 'numeric',
+              'target': 2000,
+              'unit': 'step',
+              'start_date': '2026-11-13',
+              'recurrence': 'weekly',
+              'weekdays': weekdays,
+            }),
+            'is_due': weekdays.contains(DateTime.saturday),
+          },
+          now: () => wibFromParts(2026, 11, 14, 12));
+      expect(find.text('Hari terpilih (${weekdays.length}×/minggu)'),
+          findsOneWidget);
+      expect(
+          find.text(weekdays.contains(DateTime.saturday)
+              ? 'Jadwal hari ini'
+              : 'Di luar jadwal'),
+          findsOneWidget);
+      const labels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+      for (final (index, label) in labels.indexed) {
+        expect(
+            t.widget<Text>(find.text(label)).style?.color,
+            weekdays.contains(index + 1)
+                ? const Color(0xff9853a4)
+                : const Color(0xffc9cfd7));
+      }
+    });
+  }
   testWidgets(
       'daily card derives weekly denominator from schedule instead of legacy quota',
       (t) async {

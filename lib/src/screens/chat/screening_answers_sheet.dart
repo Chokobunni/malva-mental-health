@@ -254,26 +254,12 @@ class _ScreeningAnswersSheetState extends State<ScreeningAnswersSheet> {
                                               color: Color(0xff697787),
                                               fontSize: 11,
                                               height: 1.5))),
-                                  if (_dass)
-                                    Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          SizedBox(
-                                              width: 26,
-                                              height: 26,
-                                              child: Checkbox(
-                                                  value: _highest,
-                                                  onChanged: (v) => setState(
-                                                      () => _highest =
-                                                          v ?? false),
-                                                  activeColor: _purple)),
-                                          const Text('Skor tertinggi',
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: _purple)),
-                                        ]),
+                                  if (_dass) _highestToggle(),
                                 ]),
+                            if (!_dass)
+                              Align(
+                                  alignment: Alignment.centerRight,
+                                  child: _highestToggle()),
                           ])),
                     Flexible(
                         fit: _who ? FlexFit.loose : FlexFit.tight,
@@ -321,6 +307,31 @@ class _ScreeningAnswersSheetState extends State<ScreeningAnswersSheet> {
                   ]),
             )));
   }
+
+  Widget _highestToggle() => InkWell(
+        onTap: () => setState(() => _highest = !_highest),
+        borderRadius: BorderRadius.circular(6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: _dass ? 26 : 36,
+              height: _dass ? 26 : 40,
+              child: Checkbox(
+                value: _highest,
+                onChanged: (value) => setState(() => _highest = value ?? false),
+                activeColor: _purple,
+                semanticLabel: 'Skor tertinggi',
+              ),
+            ),
+            Text('Skor tertinggi',
+                style: TextStyle(
+                    fontSize: _dass ? 10 : 12,
+                    fontWeight: FontWeight.w700,
+                    color: _purple)),
+          ],
+        ),
+      );
 
   Widget _box({required Widget child, bool safety = false}) => Container(
         margin: const EdgeInsets.only(bottom: 10),

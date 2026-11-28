@@ -82,15 +82,14 @@ void main() {
                   },
                 '/v1/messages' => {
                     'messages': [
-                      if (!patient)
-                        {
-                          'id': 'incoming-patient',
-                          'sender_id': 'patient',
-                          'sender_name': 'Emilie R.',
-                          'text': 'Kondisi saya sedang kurang baik, dok',
-                          'kind': 'text',
-                          'created_at': wibIso(wibNow()),
-                        },
+                      {
+                        'id': 'incoming-patient',
+                        'sender_id': 'patient',
+                        'sender_name': 'Emilie R.',
+                        'text': 'Kondisi saya sedang kurang baik, dok',
+                        'kind': 'text',
+                        'created_at': wibIso(wibNow()),
+                      },
                       {
                         'id': 'reply',
                         'sender_id': 'professional',
@@ -160,11 +159,22 @@ void main() {
               findsOneWidget);
         }
         expect(find.text(specialty == 'Sp.KJ' ? 'Psikiater' : 'Psikolog'),
-            findsWidgets);
+            patient ? findsWidgets : findsNothing);
         expect(find.text('Dokter'), findsNothing);
         final avatars = tester
             .widgetList<ProfessionalAvatar>(find.byType(ProfessionalAvatar));
-        expect(avatars.length, greaterThanOrEqualTo(2));
+        if (patient) expect(avatars.length, greaterThanOrEqualTo(2));
+        final outgoing =
+            find.text(patient ? 'Kondisi saya sedang kurang baik, dok' : reply);
+        expect(tester.widget<Text>(outgoing).style?.color, Colors.white);
+        final purpleBubble = find.ancestor(
+            of: outgoing,
+            matching: find.byWidgetPredicate((widget) =>
+                widget is Container &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration! as BoxDecoration).gradient
+                    is LinearGradient));
+        expect(purpleBubble, findsOneWidget);
         expect(avatars.every((avatar) => avatar.borderRadius != null), isTrue);
         final output = Platform.environment['MALVA_QA_CAPTURE_DIR'];
         if (output != null) {

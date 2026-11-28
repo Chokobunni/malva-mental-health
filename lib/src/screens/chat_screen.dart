@@ -2388,7 +2388,9 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMine = message.isMine;
-    final showIdentity = isProfessional || !isMine;
+    final outgoingText = isMine && message.kind == 'text';
+    final showIdentity = !outgoingText && (isProfessional || !isMine);
+    const outgoingMeta = Color(0xffefdcf4);
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -2397,11 +2399,27 @@ class _ChatBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.88,
         ),
         margin: const EdgeInsets.only(bottom: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: outgoingText
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: showIdentity ? Colors.white : const Color(0xFFF1E6FA),
+          color: outgoingText
+              ? null
+              : showIdentity
+                  ? Colors.white
+                  : const Color(0xFFF1E6FA),
+          gradient: outgoingText
+              ? const LinearGradient(
+                  colors: [Color(0xff532173), Color(0xff7d2997)])
+              : null,
           border: Border.all(color: const Color(0xFFECE4F5)),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: outgoingText
+              ? const BorderRadius.only(
+                  topLeft: Radius.circular(17),
+                  topRight: Radius.circular(2),
+                  bottomLeft: Radius.circular(17),
+                  bottomRight: Radius.circular(17))
+              : BorderRadius.circular(18),
           boxShadow: const [
             BoxShadow(
                 color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 3))
@@ -2462,8 +2480,9 @@ class _ChatBubble extends StatelessWidget {
                 ],
                 Text(
                   message.text,
-                  style: const TextStyle(
-                    color: MalvaColors.ink,
+                  style: TextStyle(
+                    color: outgoingText ? Colors.white : MalvaColors.ink,
+                    fontWeight: FontWeight.w400,
                     height: 1.4,
                     fontSize: 14,
                   ),
@@ -2471,13 +2490,21 @@ class _ChatBubble extends StatelessWidget {
                 const SizedBox(height: 4),
                 Align(
                     alignment: Alignment.centerRight,
-                    child: Text(
-                      ChatScreen.formatMessageTime(message.timestamp),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.black38,
-                      ),
-                    )),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(ChatScreen.formatMessageTime(message.timestamp),
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: outgoingText
+                                  ? outgoingMeta
+                                  : Colors.black38)),
+                      if (outgoingText && message.id.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.check_rounded,
+                            size: 13,
+                            color: outgoingMeta,
+                            semanticLabel: 'Terkirim'),
+                      ],
+                    ])),
               ],
             ),
           ),

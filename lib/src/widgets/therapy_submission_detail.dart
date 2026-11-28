@@ -4,12 +4,107 @@ const _recordInk = Color(0xff202a38);
 const _recordMuted = Color(0xff98a5b4);
 const _recordTeal = Color(0xff17877e);
 
-class _TherapySubmissionSheet extends StatelessWidget {
-  const _TherapySubmissionSheet({required this.view});
+class _TherapySubmissionSheet extends StatefulWidget {
+  const _TherapySubmissionSheet({required this.view, this.patientSubmissionId});
   final TherapySubmissionView view;
+  final String? patientSubmissionId;
+
+  @override
+  State<_TherapySubmissionSheet> createState() =>
+      _TherapySubmissionSheetState();
+}
+
+class _TherapySubmissionSheetState extends State<_TherapySubmissionSheet> {
+  bool _sharing = false, _downloading = false;
+  late bool _isShared = widget.view.isShared;
+  String? _message;
+
+  Future<void> _share() async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final owner = container.read(currentSessionProvider);
+    final token = owner?.accessToken;
+    if (_sharing || token == null || token.isEmpty) return;
+    bool current() =>
+        mounted && container.read(currentSessionProvider) == owner;
+    setState(() {
+      _sharing = true;
+      _message = null;
+    });
+    try {
+      final api = container.read(apiClientProvider);
+      final recipient = await pickShareProfessional(
+          context: context,
+          api: api,
+          token: token,
+          isCurrent: current,
+          onEmpty: () => setState(() => _message =
+              'Belum ada profesional dengan paket terhubung atau sesi aktif.'));
+      if (recipient == null || !current()) return;
+      final saved = await api.shareTherapySubmission(
+          accessToken: token,
+          submissionId: widget.patientSubmissionId!,
+          professionalId: recipient);
+      if (container.read(currentSessionProvider) != owner) return;
+      container.read(_therapyHistoryRevision.notifier).state++;
+      if (!mounted) return;
+      setState(() {
+        _isShared = saved.isShared;
+        _message = 'Lembar kerja dibagikan ke profesional.';
+      });
+    } on Object catch (error) {
+      if (current()) setState(() => _message = friendlyErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Future<void> _download() async {
+    if (_downloading) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final owner = container.read(currentSessionProvider);
+    bool current() =>
+        mounted && container.read(currentSessionProvider) == owner;
+    final view = widget.view;
+    final createdAt = view.createdAt;
+    final entries =
+        therapyAnswerEntries(moduleId: view.moduleId, answers: view.answers);
+    setState(() {
+      _downloading = true;
+      _message = null;
+    });
+    try {
+      final bytes = await container.read(exportServiceProvider).buildPdf(
+        title: 'Lembar Kerja ${view.title} — Malva',
+        lines: [
+          if (createdAt != null)
+            'Tanggal sesi: ${formatWibDateTime(createdAt)} WIB',
+          if (view.summary.trim().isNotEmpty) view.summary,
+          for (final entry in entries) ...[entry.label, entry.answer, ''],
+        ],
+      );
+      if (!current()) return;
+      final module = view.moduleId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final saved = await container.read(savePdfFileProvider)(
+        'malva-worksheet-$module-'
+        '${(createdAt ?? wibNow()).millisecondsSinceEpoch}.pdf',
+        bytes,
+      );
+      if (saved && current()) {
+        setState(() => _message = 'Lembar kerja tersimpan sebagai PDF.');
+      }
+    } on Object catch (error) {
+      if (current()) {
+        setState(
+            () => _message = 'Gagal mengunduh. ${friendlyErrorMessage(error)}');
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final view = widget.view;
     final module = findTherapyModuleById(view.moduleId);
     final fields = module?.worksheetFields ?? const <TherapyWorksheetField>[];
     final filled =
@@ -58,12 +153,16 @@ class _TherapySubmissionSheet extends StatelessWidget {
                       color: const Color(0xffeafcf4),
                       border: Border.all(color: const Color(0xffc4eddd)),
                       borderRadius: BorderRadius.circular(30)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.check_circle_outline_rounded,
-                        color: _recordTeal, size: 17),
-                    SizedBox(width: 5),
-                    Text('Tersimpan',
-                        style: TextStyle(
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(
+                        _isShared
+                            ? Icons.send_outlined
+                            : Icons.check_circle_outline_rounded,
+                        color: _recordTeal,
+                        size: 16),
+                    const SizedBox(width: 5),
+                    Text(_isShared ? 'Dibagikan' : 'Tersimpan',
+                        style: const TextStyle(
                             color: _recordTeal, fontWeight: FontWeight.w700)),
                   ]),
                 ),
@@ -155,47 +254,105 @@ class _TherapySubmissionSheet extends StatelessWidget {
           )),
           const Divider(height: 1, color: Color(0xfff0f2f5)),
           Padding(
-              padding: const EdgeInsets.fromLTRB(22, 14, 22, 16),
-              child: Row(children: [
-                Expanded(
-                    child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            foregroundColor: const Color(0xff354353),
-                            side: const BorderSide(color: Color(0xffe0e5eb)),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14))),
-                        onPressed: () async {
-                          final text = [
-                            view.title,
-                            for (final entry in therapyAnswerEntries(
-                                moduleId: view.moduleId, answers: view.answers))
-                              '${entry.label}\n${entry.answer}',
-                          ].join('\n\n');
-                          await Clipboard.setData(ClipboardData(text: text));
-                          if (context.mounted)
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Catatan disalin.')));
-                        },
-                        icon: const Icon(Icons.copy_outlined, size: 20),
-                        label: const Text('Salin Catatan'))),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: FilledButton(
-                        style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xff11968b),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14))),
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Selesai',
-                            style: TextStyle(
-                                fontFamily: 'Roboto',
-                                fontWeight: FontWeight.w800)))),
+              padding: const EdgeInsets.fromLTRB(22, 14, 22, 12),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (_message != null) ...[
+                  Semantics(
+                      liveRegion: true,
+                      child: Text(_message!, textAlign: TextAlign.center)),
+                  const SizedBox(height: 8),
+                ],
+                if (widget.patientSubmissionId != null) ...[
+                  Row(children: [
+                    Expanded(
+                        child: _recordAction(
+                      label: 'Kirim ke Profesional',
+                      icon: Icons.send_outlined,
+                      color: const Color(0xff4940ab),
+                      fill: const Color(0xffedf0fc),
+                      border: const Color(0xffd9def1),
+                      onPressed: _sharing ? null : _share,
+                    )),
+                    const SizedBox(width: 9),
+                    Expanded(
+                        child: _recordAction(
+                      label: 'Unduh Lembar Kerja',
+                      icon: Icons.download_outlined,
+                      color: const Color(0xff354353),
+                      fill: const Color(0xfff6f7fa),
+                      border: const Color(0xffe5e8ed),
+                      onPressed: _downloading ? null : _download,
+                    )),
+                  ]),
+                  const SizedBox(height: 8),
+                ],
+                Row(children: [
+                  Expanded(
+                      child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              foregroundColor: const Color(0xff354353),
+                              side: const BorderSide(color: Color(0xffe0e5eb)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14))),
+                          onPressed: () async {
+                            final text = [
+                              view.title,
+                              for (final entry in therapyAnswerEntries(
+                                  moduleId: view.moduleId,
+                                  answers: view.answers))
+                                '${entry.label}\n${entry.answer}',
+                            ].join('\n\n');
+                            await Clipboard.setData(ClipboardData(text: text));
+                            if (context.mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('Catatan disalin.')));
+                          },
+                          icon: const Icon(Icons.copy_outlined, size: 20),
+                          label: const Text('Salin Catatan'))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: FilledButton(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xff11968b),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14))),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Selesai',
+                              style: TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontWeight: FontWeight.w800)))),
+                ]),
               ])),
         ]);
   }
+
+  Widget _recordAction({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required Color fill,
+    required Color border,
+    required VoidCallback? onPressed,
+  }) =>
+      OutlinedButton.icon(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          backgroundColor: fill,
+          side: BorderSide(color: border),
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 5),
+          minimumSize: const Size.fromHeight(42),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        icon: Icon(icon, size: 16),
+        label: Text(label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      );
 }
 
 bool _recordHasAnswer(Object? answer) {
